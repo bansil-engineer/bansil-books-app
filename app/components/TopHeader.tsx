@@ -2,6 +2,7 @@
 
 import React from "react";
 import { UniversalSearchBox } from "./UniversalSearchBox";
+import { useAuth } from "./AuthProvider";
 
 interface TopHeaderProps {
   pageTitle: string;
@@ -27,6 +28,7 @@ export function TopHeader({
   onNavigateToCustomer,
 }: TopHeaderProps) {
   const isOffline = !connected || syncStatusText === "Offline";
+  const { user, logout } = useAuth();
 
   return (
     <header className="app-top-header" role="banner">
@@ -77,6 +79,30 @@ export function TopHeader({
           <span>{syncing ? "⏳" : "↻"}</span>
           <span>{syncing ? "Syncing…" : "Sync Zoho Books"}</span>
         </button>
+        {/* User & Sign Out */}
+        {user && (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginLeft: "8px", paddingLeft: "8px", borderLeft: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "12px", color: "var(--text-secondary)", fontWeight: 500 }}>
+              {user.name || user.email}
+            </span>
+            <button
+              onClick={logout}
+              title="Sign out"
+              style={{
+                padding: "4px 10px",
+                fontSize: "12px",
+                fontWeight: 500,
+                color: "#d93025",
+                background: "transparent",
+                border: "1px solid #dadce0",
+                borderRadius: "6px",
+                cursor: "pointer",
+              }}
+            >
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
     </header>
   );

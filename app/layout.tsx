@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./accounting-theme.css";
+import { AuthProvider } from "./components/AuthProvider";
 
 export const metadata: Metadata = {
   title: "Bansil Engineers — Reconciliation & Analytics",
@@ -19,7 +20,9 @@ export default function RootLayout({
         <meta name="robots" content="noindex, nofollow" />
       </head>
       <body>
-        <div className="app-shell">{children}</div>
+        <AuthProvider>
+          <div className="app-shell">{children}</div>
+        </AuthProvider>
       </body>
     </html>
   );
