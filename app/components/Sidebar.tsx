@@ -181,6 +181,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "settings_skills", label: "Skills", featureKey: "sub_settings_skills" },
       { id: "settings_exclusions", label: "Exclusion Rules", featureKey: "module_exclusion_management" },
       { id: "settings_suggestions", label: "Exclusion Suggestions", featureKey: "module_ai_insights" },
+      { id: "settings_users", label: "User Management" },
       { id: "settings_security", label: "Security" },
     ],
   },

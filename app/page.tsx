@@ -38,6 +38,7 @@ import { ZohoActivityView } from "@/app/components/ZohoActivityView";
 import { SettingsModulesView } from "@/app/components/SettingsModulesView";
 
 import { SettingsSkillsView } from "@/app/components/SettingsSkillsView";
+import { UserManagementView } from "@/app/components/UserManagementView";
 import { OwnerAuthGate } from "@/app/components/OwnerAuthGate";
 import { InventoryStockView } from "@/app/components/InventoryStockView";
 import { AccountsAuditView } from "@/app/components/AccountsAuditView";
@@ -951,6 +952,7 @@ export default function HomePage() {
     } else if (sidebarSection.startsWith("services_")) allowed = isFeatureEnabled("module_services");
     else if (sidebarSection.startsWith("report_")) allowed = isFeatureEnabled("module_reports");
     else if (sidebarSection === "settings_exclusions") allowed = isFeatureEnabled("module_exclusion_management");
+
     else if (sidebarSection === "settings_suggestions") allowed = isFeatureEnabled("module_ai_insights");
     else if (sidebarSection === "audit_workspaces") allowed = isFeatureEnabled("module_audit_workspace") && isFeatureEnabled("sub_audit_workspaces");
     else if (sidebarSection === "audit_uploads") allowed = isFeatureEnabled("module_audit_workspace") && isFeatureEnabled("sub_audit_uploads");
@@ -1148,6 +1150,7 @@ export default function HomePage() {
     settings_modules: "Modules & Features",
     settings_exclusions: "Exclusion Rules",
     settings_suggestions: "Exclusion Suggestions",
+    settings_users: "User Management",
     settings_security: "Security",
     settings_skills: "Settings — Skills",
     audit_workspaces: "Reconciliation & Audit — Workspaces / Runs",
@@ -1681,6 +1684,11 @@ export default function HomePage() {
           )}
 
           {/* 12. SETTINGS: EXCLUSION SUGGESTIONS */}
+          {/* SETTINGS: USER MANAGEMENT */}
+          {sidebarSection === "settings_users" && (
+            <UserManagementView />
+          )}
+
           {sidebarSection === "settings_suggestions" && (
             <ExclusionSuggestionsView />
           )}
