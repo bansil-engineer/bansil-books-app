@@ -1,0 +1,56 @@
+"use client";
+import { useRef, useState } from "react";
+import s from "./preview.module.css";
+
+type Section = "Overview" | "Sales" | "Purchase" | "Inventory" | "SO Trace";
+type RecordRow = { id: string; party: string; description: string; domain: "Sales" | "Purchase" | "Inventory"; amount: number | null; status: "Ready" | "Needs review" | "Incomplete"; note: string };
+const sections: Section[] = ["Overview", "Sales", "Purchase", "Inventory", "SO Trace"];
+const icons = ["◫", "↗", "↙", "▦", "⌘"];
+const years = ["2026-27", "2025-26", "2024-25"];
+// Fictional fixture scenarios only. No imports from legacy data, DB, sync or OAuth.
+function sampleRows(fy: string): RecordRow[] {
+ const tag=fy.slice(2,4); const current=fy==="2026-27";
+ return [
+  {id:`DEMO-INV-${tag}-001`,party:"Sample Customer A",description:"Control panel supply",domain:"Sales",amount:current?125000:98000,status:"Ready",note:"આ નમૂનામાં invoice અને SO line વચ્ચે સીધી link બતાવેલી છે. આ actual accounting record નથી."},
+  {id:`DEMO-CN-${tag}-002`,party:"Sample Customer B",description:"Sales credit note",domain:"Sales",amount:current?-8500:-4200,status:"Needs review",note:"Credit noteની invoice allocationની સમીક્ષા બાકી હોવાનું આ નમૂનું દર્શાવે છે."},
+  {id:`DEMO-BILL-${tag}-003`,party:"Sample Supplier A",description:"Panel components",domain:"Purchase",amount:current?78000:62000,status:"Ready",note:"આ નમૂનામાં PO અને Bill lineની quantity match દર્શાવેલી છે. Source verification થયું નથી."},
+  {id:`DEMO-BILL-${tag}-004`,party:"Sample Supplier B",description:"Cable accessories",domain:"Purchase",amount:null,status:"Incomplete",note:"Bill detail અધૂરી હોય ત્યારે amountને zero ગણવાને બદલે unavailable બતાવવામાં આવે છે."},
+  {id:`DEMO-ITEM-${tag}-005`,party:"Sample item · MCB",description:"Quantity / UOM check",domain:"Inventory",amount:null,status:"Needs review",note:"UOM conversionનો પુરાવો ન હોય ત્યાં quantity match confirm કરવામાં આવતું નથી."},
+  {id:`DEMO-ASM-${tag}-006`,party:"Sample assembly · Panel",description:"BOM evidence missing",domain:"Inventory",amount:null,status:"Incomplete",note:"Approved BOM વગર component consumption અને valuation અપૂર્ણ રહે છે."},
+ ];
+}
+const money=(amount:number|null)=>amount===null?"Unavailable":new Intl.NumberFormat("en-IN",{style:"currency",currency:"INR",maximumFractionDigits:0}).format(amount);
+export default function Preview(){
+ const [section,setSection]=useState<Section>("Overview"); const [fy,setFy]=useState(years[0]);
+ const [query,setQuery]=useState("");const [status,setStatus]=useState("All statuses");const [selected,setSelected]=useState<RecordRow|null>(null);
+ const dialog=useRef<HTMLDialogElement>(null);
+ const rows=sampleRows(fy);const visible=rows.filter(r=>(section==="Overview"||r.domain===section)&&(status==="All statuses"||r.status===status)&&`${r.id} ${r.party} ${r.description}`.toLowerCase().includes(query.toLowerCase().trim()));
+ function navigate(next:Section){setSection(next);setQuery("");setStatus("All statuses");}
+ function inspect(row:RecordRow){setSelected(row);dialog.current?.showModal();}
+ return <div className={s.shell}>
+  <a className={s.skip} href="#audit-content">Skip to content</a>
+  <aside className={s.sidebar}>
+   <div className={s.brand}><span className={s.brandMark}>B</span><div>BANSIL<span>ENGINEERS</span></div></div>
+   <div className={s.workspaceLabel}>AUDIT WORKSPACE <span>V2</span></div>
+   <nav aria-label="Audit sections">{sections.map((name,i)=><button key={name} className={section===name?s.activeNav:s.nav} aria-current={section===name?"page":undefined} onClick={()=>navigate(name)}><span aria-hidden="true">{icons[i]}</span>{name}{section===name&&<b aria-hidden="true">›</b>}</button>)}</nav>
+   <div className={s.sideNote}><span className={s.pulse}/> Preview environment<p>જુઓ, તપાસો અને layout વિશે તમારો અભિપ્રાય આપો.</p><div className={s.sideDivider}/><small>LIVE CONNECTION</small><strong>Not connected</strong><span className={s.sideFoot}>Demo records only</span></div>
+   <footer className={s.sideFooter}>Bansil Engineers <span>Master Audit V2</span></footer>
+  </aside>
+  <div className={s.body}>
+   <header className={s.topbar}><div><span className={s.breadcrumb}>Workspace</span><span className={s.slash}>/</span><strong>Master Audit V2</strong></div><div className={s.topActions}><span className={s.demoPill}>DEMO PREVIEW</span><span className={s.avatar} aria-label="Owner preview">BE</span></div></header>
+   <main id="audit-content" className={s.main}>
+    <div className={s.heading}><div><div className={s.eyebrow}>MASTER AUDIT / {section.toUpperCase()}</div><h1>{section==="Overview"?"Audit overview":section==="SO Trace"?"Sales Order trace":`${section} overview`}</h1><p>{section==="Overview"?"એક જ જગ્યાએ દસ્તાવેજો, અધૂરી માહિતી અને આગળની સમીક્ષા જુઓ.":section==="SO Trace"?"Sales Orderથી purchase અને invoice સુધીની નમૂનાની કડી તપાસો.":"દસ્તાવેજ પસંદ કરીને તેની સ્થિતિ અને નમૂનાનો પુરાવો તપાસો."}</p></div><label className={s.fy}>Financial year<select value={fy} onChange={e=>{setFy(e.target.value);setSelected(null);setQuery("");setStatus("All statuses");}}>{years.map(y=><option key={y} value={y}>FY {y}</option>)}</select></label></div>
+    <div className={s.banner}><span className={s.bannerIcon} aria-hidden="true">i</span><div><strong>You’re viewing a sample workspace</strong><p>આ તમામ records અને amounts કાલ્પનિક છે. Zoho સાથે જોડાણ નથી; કોઈ accounting entry બદલાતી નથી.</p></div><span className={s.notConnected}>Not connected</span></div>
+    <div className={s.metrics}>
+     {[{label:"Sample documents",value:"06",detail:`Demo scenario · FY ${fy}`,tone:""},{label:"Ready in demo",value:"02",detail:"Sample evidence available",tone:s.green},{label:"Needs review",value:"02",detail:"Owner attention illustrated",tone:s.amber},{label:"Incomplete",value:"02",detail:"Missing evidence illustrated",tone:s.red}].map(m=><div className={s.metric} key={m.label}><span>{m.label}</span><strong className={m.tone}>{m.value}</strong><small>{m.detail}</small></div>)}
+    </div>
+    {section==="SO Trace"?<section className={s.panel}><div className={s.panelHead}><div><h2>SO commercial trace</h2><p>DEMO-SO-{fy.slice(2,4)}-001 · Sample Customer A · FY {fy}</p></div><span className={s.demoPill}>ILLUSTRATIVE</span></div><div className={s.trace}>{[{title:"Sales Order",id:`DEMO-SO-${fy.slice(2,4)}-001`,qty:"10 units requested",note:"નમૂનાનું order",row:rows[0]},{title:"Purchase Order",id:`DEMO-PO-${fy.slice(2,4)}-001`,qty:"10 units ordered",note:"SO reference shown",row:rows[2]},{title:"Bill",id:rows[2].id,qty:"8 units billed",note:"2 units pending in demo",row:rows[2]},{title:"Invoice",id:rows[0].id,qty:"6 units invoiced",note:"4 units pending in demo",row:rows[0]}].map((node,i)=><div className={s.traceNode} key={node.title}><span className={s.step}>0{i+1}</span><h3>{node.title}</h3><code>{node.id}</code><strong>{node.qty}</strong><p>{node.note}</p><button className={s.textButton} onClick={()=>inspect(node.row)}>View {node.row.domain==="Sales"?"invoice":"bill"} evidence <span aria-hidden="true">↗</span></button></div>)}</div><div className={s.traceFoot}><strong>Links are examples, not verified relationships.</strong><p>આ sequence માત્ર commercial overview છે. SO → Invoice અને PO → Billની quantities અલગ છે; આ stock movement કે margin calculation નથી.</p></div></section>:<div className={s.columns}>
+     <section className={s.panel}><div className={s.panelHead}><div><h2>{section==="Overview"?"Document review":`${section} documents`}</h2><p>Sample records · select a document to inspect</p></div><span className={s.count}>{visible.length} shown</span></div><div className={s.filters}><label className={s.search}><span aria-hidden="true">⌕</span><input aria-label="Search demo documents" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search document or party…"/></label><select aria-label="Filter by review status" value={status} onChange={e=>setStatus(e.target.value)}>{["All statuses","Ready","Needs review","Incomplete"].map(x=><option key={x}>{x}</option>)}</select></div><div className={s.tableWrap}><table className={s.table}><thead><tr><th>Document / party</th><th>Section</th><th className={s.amount}>Sample amount</th><th>Status</th><th><span className={s.srOnly}>Evidence</span></th></tr></thead><tbody>{visible.map(row=><tr key={row.id}><td><strong>{row.id}</strong><span>{row.party}</span></td><td>{row.domain}</td><td className={s.amount}>{money(row.amount)}</td><td><span className={`${s.status} ${row.status==="Ready"?s.ready:row.status==="Incomplete"?s.incomplete:s.review}`}>{row.status}</span></td><td><button aria-label={`View ${row.id}`} className={s.viewButton} onClick={()=>inspect(row)}>View <span aria-hidden="true">↗</span></button></td></tr>)}</tbody></table>{!visible.length&&<div className={s.empty}><h3>No matching sample documents</h3><p>Search અથવા status filter બદલીને ફરી તપાસો.</p><button className={s.textButton} onClick={()=>{setQuery("");setStatus("All statuses");}}>Clear filters</button></div>}</div><div className={s.tableFoot}><span className={s.smallDot}/> No live accounting data in this preview</div></section>
+     <aside className={s.rightColumn}><section className={s.panel}><div className={s.panelHead}><div><h2>Source readiness</h2><p>Actual connection status</p></div></div>{["Zoho Books","Document details","Inventory evidence"].map((name,i)=><div className={s.source} key={name}><span className={s.sourceIcon} aria-hidden="true">{["Z","▤","▦"][i]}</span><div><strong>{name}</strong><small>{i===0?"Not connected":"Not acquired"}</small></div><span className={s.offDot}/></div>)}<div className={s.sourceFooter}><button disabled>Connect & sync — unavailable</button><p>Live data connection આ previewમાં ઉપલબ્ધ નથી.</p></div></section><section className={s.attention}><div className={s.eyebrow}>NEXT REVIEW</div><h2>Start with the missing pieces.</h2><p>અધૂરી detailsને zero ગણશો નહીં. પહેલાં source evidence તપાસો.</p><button onClick={()=>{navigate("Overview");setStatus("Incomplete");}}>View incomplete samples <span aria-hidden="true">→</span></button></section></aside>
+    </div>}
+    <footer className={s.footer}><span>MASTER AUDIT V2 <b>·</b> Preview for Owner review</span><span>Demo data <b>·</b> No live sync <b>·</b> No postings</span></footer>
+   </main>
+  </div>
+  <dialog className={s.dialog} ref={dialog} aria-labelledby="evidence-title"><div className={s.dialogTop}><span className={s.demoPill}>SAMPLE EVIDENCE</span><button aria-label="Close evidence" onClick={()=>dialog.current?.close()}>×</button></div><h2 id="evidence-title">Document evidence</h2>{selected&&<><p className={s.dialogId}>{selected.id}</p><dl><div><dt>Financial year</dt><dd>FY {fy}</dd></div><div><dt>Party / item</dt><dd>{selected.party}</dd></div><div><dt>Description</dt><dd>{selected.description}</dd></div><div><dt>Sample amount</dt><dd>{money(selected.amount)}</dd></div><div><dt>Review status</dt><dd>{selected.status}</dd></div><div><dt>Source</dt><dd>Fictional demo fixture</dd></div></dl><div className={s.evidenceNote}><strong>Review note</strong><p>{selected.note}</p></div><p className={s.dialogDisclaimer}>No source document has been acquired or verified.</p></>}<button className={s.closeButton} onClick={()=>dialog.current?.close()}>Back to workspace</button></dialog>
+ </div>;
+}

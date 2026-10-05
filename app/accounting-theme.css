@@ -1,0 +1,105 @@
+/* Shared accounting presentation; no navigation or business logic changes. */
+:root { --bg: #f6f7fb; --border: #dce2ec; --border-subtle: #e9edf4; --bg-subtle: #f7f8fc; --text-primary: #263044; --text-secondary: #66738a; }
+.sidebar { background: #f8f8fe; border-right-color: var(--border); }
+.sidebar-brand { background: #fff; }
+.app-main > .app-top-header { background: #fff; border-bottom-color: var(--border); }
+.section-card { border-color: var(--border); box-shadow: 0 1px 3px rgb(30 41 59 / 5%); }
+.data-table thead th { background: #f7f8fc; font-size: 11px; letter-spacing: .025em; }
+.data-table tbody td { padding-top: 12px; padding-bottom: 12px; }
+.data-table tbody tr:hover { background: #f2f6ff; }
+.app-shell button:focus-visible, .app-shell a:focus-visible, .app-shell input:focus-visible, .app-shell select:focus-visible, .app-shell summary:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.app-shell button:disabled { cursor: not-allowed; opacity: .55; }
+@media (prefers-reduced-motion: reduce) { .app-shell *, .app-shell *::before, .app-shell *::after { scroll-behavior: auto !important; transition: none !important; } }
+@media (max-width: 700px) {
+  .app-shell { flex-direction: column; }
+  .sidebar, .sidebar.collapsed { position: relative; width: 100%; min-width: 0; max-height: 240px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .sidebar .sidebar-nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: auto; flex: none; max-height: 170px; }
+  .sidebar .sidebar-footer { display: none; }
+  .sidebar.collapsed .sidebar-nav { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .sidebar.collapsed .sidebar-brand { flex-direction: row; }
+  .sidebar.collapsed .sidebar-collapse-btn { margin: 0 0 0 auto; }
+  .app-main, .app-main.collapsed { margin-left: 0; width: 100%; }
+  .app-main > .app-top-header { position: static; padding: 12px; flex-wrap: wrap; }
+  .app-top-header-left { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+  .app-content, .main-content { padding: 12px; }
+  .accounts-audit .audit-toolbar { padding: 12px 8px; }
+  .accounts-audit .audit-order-fields, .accounts-audit .audit-order-detail { padding: 12px; }
+}
+
+/* ============================================================
+   PRE-AUDIT DEDICATED REPORT-ONLY PRINT ISOLATION
+   Excludes all site chrome: sidebar, top header, search, buttons
+   ============================================================ */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+    line-height: 1.4 !important;
+  }
+
+  /* Hide entire website chrome */
+  .sidebar,
+  .app-top-header,
+  .pre-audit-banner,
+  .pre-audit-nav,
+  .no-print,
+  button,
+  input,
+  select {
+    display: none !important;
+  }
+
+  .app-shell,
+  .app-main,
+  .app-content,
+  .main-content {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: #ffffff !important;
+  }
+
+  #pre-audit-report-print-container {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+  }
+
+  /* Table print optimization */
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    page-break-inside: auto !important;
+  }
+
+  tr {
+    page-break-inside: avoid !important;
+    page-break-after: auto !important;
+  }
+
+  thead {
+    display: table-header-group !important;
+  }
+
+  th, td {
+    border: 1px solid #cbd5e1 !important;
+    padding: 6px 8px !important;
+    font-size: 9pt !important;
+  }
+
+  th {
+    background: #f1f5f9 !important;
+    font-weight: bold !important;
+    text-align: left !important;
+  }
+
+  .print-page-break {
+    page-break-before: always !important;
+  }
+}
+

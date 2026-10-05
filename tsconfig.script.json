@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "./dist-scripts"
+  },
+  "include": [
+    "scripts/phase-5g2g-acquisition.ts"
+  ]
+}

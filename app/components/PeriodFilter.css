@@ -1,0 +1,71 @@
+.period-filter-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.period-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.period-filter-label {
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.period-filter-select, .period-filter-date {
+  padding: 6px 12px;
+  border: 1px solid var(--border-light);
+  border-radius: 4px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.period-filter-select:focus, .period-filter-date:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.period-filter-custom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.period-filter-separator {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.period-filter-error {
+  color: #ef4444;
+  font-size: 12px;
+}
+
+.period-filter-apply-btn {
+  background-color: var(--google-blue);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-left: 8px;
+}
+.period-filter-apply-btn:hover:not(:disabled) {
+  background-color: var(--google-blue-hover);
+}
+.period-filter-apply-btn:disabled {
+  background-color: var(--bg-active);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+.period-filter-date.error-border {
+  border-color: var(--google-red);
+}

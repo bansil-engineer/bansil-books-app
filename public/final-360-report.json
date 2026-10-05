@@ -1,0 +1,72 @@
+{
+  "sales": {
+    "universe": 457,
+    "acquired": 457
+  },
+  "purchase": {
+    "universe": 1194,
+    "acquired": 1192,
+    "unavailable": 1,
+    "synthetic": 1
+  },
+  "gstr1_months": 12,
+  "gstr2b_months": 12,
+  "gstr3b_months": 12,
+  "cash_ledger": "AVAILABLE",
+  "sales_g1_diff": {
+    "taxable": 0.0,
+    "igst": "SOURCE_LIMITATION",
+    "cgst": "SOURCE_LIMITATION",
+    "sgst": "SOURCE_LIMITATION",
+    "cess": "SOURCE_LIMITATION",
+    "months": []
+  },
+  "sales_doc_reco": "BLOCKED_SOURCE_LIMITATION",
+  "pur_2b_reco": {
+    "exact": 940,
+    "rounding": 52,
+    "value_mismatch": 25,
+    "date_mismatch": 12,
+    "books_only": 163,
+    "g2b_only": 20,
+    "unavailable": 1,
+    "duplicate_groups": 1
+  },
+  "rcm": {
+    "docs": 9,
+    "taxable": 22703.46
+  },
+  "g3b_cash_ledger": {
+    "match_months": 11,
+    "proven_timing_shift": 1,
+    "proven_diff": 0,
+    "unexplained_diff": 0,
+    "interest": "EXPLICIT_ZERO",
+    "late_fee": "EXPLICIT_ZERO"
+  },
+  "cn_dn": {
+    "sales_cn": {
+      "books_count": 10,
+      "gstr1_cdnr_count": 10,
+      "books_taxable": 6708327.31,
+      "gstr1_taxable": 6708327.31,
+      "difference": 0.0,
+      "document_identity": "SOURCE_LIMITATION",
+      "status": "SOURCE ACQUIRED"
+    },
+    "sales_dn": "SOURCE_PROVEN_ZERO",
+    "pur_cn": "SOURCE_PROVEN_ZERO",
+    "pur_dn": "SOURCE_PROVEN_ZERO"
+  },
+  "actions": {
+    "high": 0,
+    "medium": 29,
+    "low": 52,
+    "info": 185,
+    "superseded": 13
+  },
+  "limitations": 1,
+  "not_comparable": 1,
+  "incidents": 1,
+  "missing_to_zero": 0
+}

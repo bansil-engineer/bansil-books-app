@@ -1,0 +1,89 @@
+UI ROOT CAUSE:
+The `CashBooksView.tsx` component was written using Tailwind CSS classes (e.g., `bg-white`, `border-gray-200`, `grid-cols-5`). However, the project does not have Tailwind CSS installed (`package.json` has no `tailwindcss` dependency and `tailwind.config.ts` does not exist). The Pre-Audit visual system relies on raw CSS / inline React `style={{ ... }}` objects. Because Tailwind was missing, the classes did nothing, causing the report to render as unstyled, plain HTML.
+
+CANONICAL CASH VIEW:
+`app/components/audit/cash/CashBooksView.tsx`
+
+DUPLICATE INNER TOOLBAR:
+REMOVED
+
+SUMMARY CARDS:
+PASS
+
+FIVE NEGATIVE METRIC CARDS:
+PASS
+
+CASH REGISTER TABLE:
+PASS
+
+EVIDENCE DRILL-DOWN:
+PASS
+
+SYNC METADATA CONTRADICTION:
+FIXED
+
+SOURCE PROVENANCE WORDING:
+PASS
+
+FY/AY:
+PASS
+
+NO-RUN STATE:
+PASS
+
+FY2025-26 NET CASH:
+₹2,87,009.51
+
+FY2025-26 CASH ACCOUNTS:
+19
+
+NEGATIVE CLOSING:
+0
+
+ACCOUNTS NEGATIVE DURING FY:
+15
+
+CONTINUOUS NEGATIVE PERIODS:
+54
+
+ACCOUNTING VALUES CHANGED:
+NO
+
+PHASE-2A PRODUCTION LOGIC MODIFIED:
+NO
+
+EXPORT ENGINE MODIFIED:
+NO
+
+TYPECHECK:
+PASS
+
+BUILD:
+PASS
+
+STAGE-5A TEST:
+PASS
+
+CROSS-FY:
+PASS
+
+PHASE-2A:
+PASS
+
+STAGE-4:
+PASS
+
+FULL WORKSPACE:
+PASS
+
+ZOHO GET:
+0
+
+ZOHO WRITE:
+0
+
+DATABASE MODIFIED:
+NO
+
+READY FOR OWNER UI-ONLY LIVE CHECK:
+YES

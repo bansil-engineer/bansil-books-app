@@ -1,0 +1,42 @@
+RUNNING scripts/invoice-line-resolution-r1a-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/invoice-line-resolution-r1a-tests.ts
+RUNNING scripts/manual-line-mapping-phase2-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/manual-line-mapping-phase2-tests.ts
+RUNNING scripts/manual-line-mapping-phase3-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/manual-line-mapping-phase3-tests.ts
+RUNNING scripts/test-smart-sync-approval-pending.ts
+zsh:1: command not found: timeout
+FAILED scripts/test-smart-sync-approval-pending.ts
+RUNNING scripts/invoice-so-reference-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/invoice-so-reference-tests.ts
+RUNNING scripts/targeted-invoice-so-sync-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/targeted-invoice-so-sync-tests.ts
+RUNNING scripts/uom-consistency-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/uom-consistency-tests.ts
+RUNNING scripts/commercial-trace-uom-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/commercial-trace-uom-tests.ts
+RUNNING scripts/ct-writer-safety-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/ct-writer-safety-tests.ts
+RUNNING scripts/ct-invoice-desc-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/ct-invoice-desc-tests.ts
+RUNNING scripts/test-rate-guard.ts
+zsh:1: command not found: timeout
+FAILED scripts/test-rate-guard.ts
+RUNNING scripts/so-po-mapping-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/so-po-mapping-tests.ts
+RUNNING scripts/ap-uom-bridge-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/ap-uom-bridge-tests.ts
+RUNNING scripts/manual-line-mapping-tests.ts
+zsh:1: command not found: timeout
+FAILED scripts/manual-line-mapping-tests.ts

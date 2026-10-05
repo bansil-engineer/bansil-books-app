@@ -1,0 +1,23 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+const p=require(path.resolve('app/lib/external-connections.cjs'));
+const original=process.cwd(),tmp=fs.mkdtempSync(path.join(os.tmpdir(),'connections-test-'));process.chdir(tmp);
+let count=0;function test(name,f){f();count++;console.log('PASS '+name);}
+(async()=>{const file=p.policyPath();
+test('missing policy preserves existing implemented access without writes',()=>{assert.equal(p.readPolicy().enabled.zoho,true);assert.equal(fs.existsSync(file),false);});
+test('unsupported integrations stay blocked',()=>assert.throws(()=>p.assertConnectionAllowed('sharepoint')));
+test('disconnect blocks Zoho',()=>{p.writePolicy('disconnect','zoho',0);assert.throws(()=>p.assertConnectionAllowed('zoho'));});
+test('connect re-enables only selected existing integration',()=>{p.writePolicy('connect','zoho',1);p.assertConnectionAllowed('zoho');});
+test('stale concurrent update cannot overwrite policy',()=>assert.throws(()=>p.writePolicy('disconnect','openai',1)));
+test('invalid actions and unimplemented connect rejected',()=>{assert.throws(()=>p.writePolicy('connect','sharepoint',2));assert.throws(()=>p.writePolicy('wrong','zoho',2));});
+test('disconnect all covers every integration',()=>{p.writePolicy('disconnect-all','',2);assert.ok(Object.values(p.readPolicy().enabled).every(v=>!v));});
+let calls=0;global.fetch=async()=>{calls++;return new Response('mock');};
+await assert.rejects(p.connectionFetch('zoho','https://example.invalid'));assert.equal(calls,0);console.log('PASS disconnected path never calls fetch');count++;
+p.writePolicy('connect','zoho',3);assert.equal(await(await p.connectionFetch('zoho','https://example.invalid')).text(),'mock');assert.equal(calls,1);console.log('PASS connected path calls mock transport');count++;
+global.fetch=(url,init)=>new Promise((resolve,reject)=>{init.signal.addEventListener('abort',()=>reject(Error('aborted')),{once:true});});
+const running=p.connectionFetch('zoho','https://example.invalid');p.writePolicy('disconnect','zoho',4);await assert.rejects(running,/aborted/);console.log('PASS disconnect aborts pending fetch');count++;
+test('malformed policy fails closed',()=>{fs.writeFileSync(file,'bad');assert.throws(()=>p.assertConnectionAllowed('openai'));});
+test('local same-origin POST accepted',()=>p.localControlRequest(new Request('http://localhost:3000/api/connections',{method:'POST',headers:{origin:'http://localhost:3000',host:'localhost:3000'}})));
+test('foreign origin and missing origin rejected',()=>{assert.throws(()=>p.localControlRequest(new Request('http://localhost:3000/api/connections',{method:'POST',headers:{origin:'https://evil.invalid'}})));assert.throws(()=>p.localControlRequest(new Request('http://localhost:3000/api/connections',{method:'POST'})));});
+test('nonlocal deployment control rejected',()=>assert.throws(()=>p.localControlRequest(new Request('https://example.invalid/api/connections'))));
+console.log(`${count} connection tests PASS; mock transport only, temporary policy only`);
+})().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{process.chdir(original);fs.rmSync(tmp,{recursive:true,force:true});});

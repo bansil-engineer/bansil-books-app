@@ -1,0 +1,11 @@
+{
+  "name": "bansil-chatgpt-antigravity-orchestrator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --experimental-strip-types src/server.ts",
+    "test": "node --experimental-strip-types --test test/workflow.test.ts",
+    "check:sdk": "python3 bridge/antigravity_bridge.py --check"
+  },
+  "engines": { "node": ">=22.5" }
+}

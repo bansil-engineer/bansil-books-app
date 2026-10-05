@@ -1,0 +1,434 @@
+/* ============================================================
+   Phase 4E-UI: Technical Equivalence Review View
+   Follows existing Bansil Engineers design tokens from globals.css
+   ============================================================ */
+
+/* ---- Container ---- */
+.te-review {
+  padding: 0;
+}
+
+.te-review .section-card {
+  margin-bottom: 16px;
+}
+
+/* ---- Status badges ---- */
+.te-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.te-status-badge.match {
+  background: var(--google-green-bg);
+  color: var(--google-green);
+}
+
+.te-status-badge.conflict {
+  background: var(--google-red-bg);
+  color: var(--google-red);
+}
+
+.te-status-badge.insufficient {
+  background: var(--google-amber-bg);
+  color: var(--google-amber);
+}
+
+.te-status-badge.unknown {
+  background: #f1f3f4;
+  color: var(--text-secondary);
+}
+
+.te-status-badge .te-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.te-status-badge.match .te-status-dot { background: var(--google-green); }
+.te-status-badge.conflict .te-status-dot { background: var(--google-red); }
+.te-status-badge.insufficient .te-status-dot { background: var(--google-amber); }
+.te-status-badge.unknown .te-status-dot { background: var(--text-muted); }
+
+/* ---- BOQ selector panel ---- */
+.te-boq-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.te-boq-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.te-boq-search:focus {
+  border-color: var(--google-blue);
+  box-shadow: 0 0 0 2px var(--google-blue-bg);
+}
+
+.te-boq-list {
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.te-boq-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+  background: none;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+  width: 100%;
+  text-align: left;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.te-boq-item:last-child { border-bottom: none; }
+.te-boq-item:hover { background: var(--bg-hover); }
+.te-boq-item.active { background: var(--google-blue-bg); border-left: 3px solid var(--google-blue); }
+
+.te-boq-item-line {
+  font-weight: 500;
+  color: var(--text-secondary);
+  min-width: 50px;
+  flex-shrink: 0;
+}
+
+.te-boq-item-desc {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.te-boq-item-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ---- Technical result header ---- */
+.te-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.te-result-labels {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.te-safety-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ---- Attribute comparison table ---- */
+.te-attr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.te-attr-table th {
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-subtle);
+}
+
+.te-attr-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.te-attr-table tr:last-child td { border-bottom: none; }
+
+.te-attr-table tr:hover td { background: var(--bg-hover); }
+
+.te-attr-table .te-dim-name {
+  font-weight: 500;
+  min-width: 140px;
+}
+
+.te-attr-table .te-val-missing {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.te-attr-table .te-val-conflict {
+  color: var(--google-red);
+  font-weight: 500;
+}
+
+.te-conflict-note {
+  font-size: 12px;
+  color: var(--google-red);
+  margin-top: 4px;
+}
+
+/* ---- Candidate comparison table ---- */
+.te-candidates-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.te-candidates-table th {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  background: var(--bg-subtle);
+  white-space: nowrap;
+}
+
+.te-candidates-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.te-candidates-table tr:hover td { background: var(--bg-hover); }
+.te-candidates-table tr:last-child td { border-bottom: none; }
+
+.te-candidate-row {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.te-candidate-row.active {
+  background: var(--google-blue-bg) !important;
+}
+
+.te-candidate-row .te-rate-cell {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---- Detail panel (BOQ requirement + Candidate evidence) ---- */
+.te-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .te-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.te-detail-panel {
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+}
+
+.te-detail-panel h4 {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.te-detail-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 13px;
+  gap: 12px;
+}
+
+.te-detail-label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.te-detail-value {
+  color: var(--text-primary);
+  text-align: right;
+  word-break: break-word;
+}
+
+.te-detail-value.missing {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ---- Review state indicator ---- */
+.te-review-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.te-review-state.needs-review {
+  background: var(--google-amber-bg);
+  color: var(--google-amber);
+  border: 1px solid #f5c518;
+}
+
+.te-review-state.system-result {
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ---- Filters bar ---- */
+.te-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.te-filter-chip {
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: all 0.15s;
+}
+
+.te-filter-chip:hover { border-color: var(--google-blue); color: var(--google-blue); }
+.te-filter-chip.active { background: var(--google-blue-bg); border-color: var(--google-blue); color: var(--google-blue); font-weight: 500; }
+
+/* ---- Empty / Error states ---- */
+.te-empty-state {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.te-empty-state .te-empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.te-empty-state .te-empty-title {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.te-empty-state .te-empty-desc {
+  font-size: 13px;
+}
+
+.te-error-state {
+  padding: 20px;
+  background: var(--google-red-bg);
+  border: 1px solid var(--google-red);
+  border-radius: var(--radius-md);
+  color: var(--google-red);
+  font-size: 13px;
+}
+
+.te-error-state .te-error-title {
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+/* ---- Summary counters ---- */
+.te-summary-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.te-summary-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 20px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  min-width: 100px;
+}
+
+.te-summary-stat .te-stat-value {
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.te-summary-stat .te-stat-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+
+.te-summary-stat.match .te-stat-value { color: var(--google-green); }
+.te-summary-stat.conflict .te-stat-value { color: var(--google-red); }
+.te-summary-stat.insufficient .te-stat-value { color: var(--google-amber); }
+
+/* ---- Version / Engine info ---- */
+.te-engine-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}

@@ -1,0 +1,127 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Zoho OAuth token store — NEVER commit this
+.tokens.json
+.tokens*.json
+.security-audit.log
+
+# SQLite local database
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Python virtual environment
+.venv/
+
+# Scratch & temporary artifacts
+scratch/
+
+# Quarantined files
+Not Required/
+
+# Runtime, dev logs & ephemeral artifacts
+debug_test.log
+next-dev.log
+cookies.txt
+dist-scripts/
+.claude/
+new.txt
+old.txt
+full_prompt_6.txt
+
+# Large data dumps & evidence (synced from Zoho at runtime)
+purchase_universe.json
+sales_universe.json
+evidence_*.json
+coa.json
+fy*.json
+schemas.json
+schemas.txt
+schema.txt
+schema_operational.txt
+
+# Development reports & handoff docs
+*_HANDOFF.md
+*_REPORT*.md
+*_ROADMAP.md
+*_ARCHITECTURE.md
+MILESTONE_*.md
+PHASE_*.md
+KNOWN_LIMITATIONS.md
+MODULE_LOCK.md
+PROJECT_FEATURE_CONTROLS.md
+MASTER_*.md
+CLEANUP_QUARANTINE_MANIFEST.md
+FINAL_*.md
+GST_*.md
+LEGACY_*.md
+INVOICE_*.md
+ITEM_TRACEABILITY_DESIGN.md
+TENDER_HUB_IMPLEMENTATION_AUDIT.md
+TARGETED*.md
+UOM-CONSISTENCY*.md
+ZOHO_AUDIT_SOURCE_COVERAGE_MATRIX.md
+
+# Test results & scratch output
+test-results*.txt
+scratch-out/
+output/
+wal-test-*/
+tender-hub-evidence/
+
+# Misc development artifacts
+report*.md
+report*.txt
+owner-task-*.txt
+patch*.txt
+patch*.js
+*.patch
+audit_schema.sql
+current_schema.sql
+server.log
+stage_v2.py
+*.log

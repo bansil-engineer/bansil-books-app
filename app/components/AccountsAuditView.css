@@ -1,0 +1,93 @@
+.accounts-audit { min-width: 0; }
+.accounts-audit .app-top-header { position: static; flex-wrap: wrap; gap: 16px; height: auto; padding: 20px 24px; }
+.accounts-audit .app-top-header-left, .accounts-audit .section-title-group { display: block; min-width: 0; }
+.accounts-audit .app-page-title { margin-bottom: 8px; }
+.accounts-audit .app-top-header-right { flex-wrap: wrap; justify-content: flex-start; gap: 8px; }
+.accounts-audit .nav-tabs-container { flex-wrap: wrap; }
+.accounts-audit .nav-tab-btn { white-space: nowrap; }
+.accounts-audit .audit-action { cursor: pointer; text-align: left; font: inherit; color: inherit; background-color: var(--bg-surface, #fff); border: 1px solid var(--border, #e2e8f0); border-radius: 8px; padding: 10px 12px; transition: box-shadow .15s, filter .15s; }
+.accounts-audit .audit-action:hover, .accounts-audit .audit-case-row:hover { box-shadow: inset 0 0 0 1px var(--google-blue); filter: brightness(.98); }
+.accounts-audit .audit-action:active { filter: brightness(.94); }
+.accounts-audit button:focus-visible, .accounts-audit input:focus-visible, .accounts-audit h3:focus-visible { outline: 3px solid var(--google-blue, #1a73e8); outline-offset: 3px; }
+.accounts-audit .audit-action.metric-card { position: relative; padding: 14px 24px 14px 14px; }
+.accounts-audit .audit-action.metric-card::after { content: '↗'; position: absolute; right: 10px; top: 12px; color: var(--google-blue); }
+.accounts-audit .audit-link { border: 0; background: none; padding: 4px; font: inherit; color: var(--google-blue, #1a73e8); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; overflow-wrap: anywhere; }
+.accounts-audit .audit-link:hover { background: var(--google-blue-bg, #e8f0fe); border-radius: 4px; }
+.accounts-audit .audit-arrow { margin-left: 8px; }
+.accounts-audit .audit-case-row { cursor: pointer; }
+.accounts-audit .section-header { flex-wrap: wrap; gap: 12px; }
+.accounts-audit .audit-note { padding: 12px 16px; color: var(--text-secondary); line-height: 1.6; }
+.accounts-audit .audit-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; padding: 12px 16px; }
+.accounts-audit .audit-dialog { width: min(850px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); border: 1px solid var(--border); border-radius: 12px; padding: 24px; color: var(--text-primary); background: var(--bg-surface, white); margin: auto; overflow: auto; }
+.accounts-audit .audit-dialog::backdrop { background: rgba(15,23,42,.45); }
+.accounts-audit .audit-dialog-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; position: sticky; top: -24px; background: white; padding: 12px 0; z-index: 1; }
+.accounts-audit .audit-dialog h2 { font-size: 18px; overflow-wrap: anywhere; }
+.accounts-audit .audit-record { border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin: 12px 0; }
+.accounts-audit dl { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(0, 2fr); gap: 8px 16px; }
+.accounts-audit dt { color: var(--text-secondary); text-transform: capitalize; }
+.accounts-audit dd { margin: 0; overflow-wrap: anywhere; }
+.accounts-audit pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media(max-width: 650px) {
+  .accounts-audit { padding: 12px; }
+  .accounts-audit .app-top-header { padding: 16px; }
+  .accounts-audit .section-card { min-width: 0; }
+  .accounts-audit .audit-dialog { padding: 16px; }
+  .accounts-audit dl { grid-template-columns: 1fr; }
+  .accounts-audit dd { margin-bottom: 8px; }
+}
+.accounts-audit .audit-action.metric-card .audit-arrow { display: none; }
+.accounts-audit .audit-comparison { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 12px; margin: 16px 0; }
+.accounts-audit .audit-comparison > div { background: var(--bg-subtle, #f8fafc); padding: 14px; border: 1px solid var(--border); border-radius: 8px; }
+.accounts-audit .audit-comparison span { display: block; color: var(--text-secondary); font-size: 12px; margin-bottom: 8px; }
+.accounts-audit .audit-comparison strong { font-size: 17px; }
+.accounts-audit .audit-party { color: var(--text-secondary); font-size: 12px; margin: 6px 0; }
+.accounts-audit .audit-warning { color: var(--google-amber, #915400); font-size: 12px; display: block; margin: 6px 0; }
+.accounts-audit details { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 12px; }
+.accounts-audit summary { cursor: pointer; color: var(--google-blue); padding: 6px 0; }
+.accounts-audit summary:focus-visible { outline: 3px solid var(--google-blue); outline-offset: 3px; }
+.accounts-audit details dl { margin-top: 12px; font-size: 12px; }
+.accounts-audit input { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; min-width: 0; max-width: 100%; }
+.accounts-audit .audit-inline-comparison { width: 100%; max-height: none; margin: 0 0 24px; scroll-margin-top: 90px; box-shadow: 0 3px 14px rgba(15,23,42,.08); }
+.accounts-audit .audit-inline-comparison .audit-dialog-header { position: static; }
+.accounts-audit .audit-chain { min-width: 0; }
+.accounts-audit .audit-chain th { white-space: nowrap; }
+.accounts-audit .audit-chain .table-scroll-container { overflow-x: auto; }
+.accounts-audit .audit-chain .audit-link { text-align: left; }
+.accounts-audit .audit-advanced > summary { font-weight: 600; padding: 16px; background: white; border: 1px solid var(--border); border-radius: 8px; }
+.accounts-audit .audit-advanced[open] { display: flex; flex-direction: column; gap: 24px; }
+.accounts-audit .audit-summary-strip { padding: 0; }
+.accounts-audit .audit-chain .table-scroll-container { max-height: 400px; overflow: auto; }
+.accounts-audit .audit-chain thead th { position: sticky; top: 0; z-index: 1; background: var(--bg-subtle, #f8fafc); }
+
+.accounts-audit .audit-order-lookup { margin-bottom: 24px; }
+.accounts-audit .audit-order-fields, .accounts-audit .audit-order-detail { padding: 20px; }
+.accounts-audit .audit-order-fields h4 { margin: 8px 0 16px; }
+.accounts-audit .audit-order-detail { border-top: 2px solid var(--google-blue); scroll-margin-top: 70px; }
+.accounts-audit .audit-order-detail td:first-child { white-space: normal; min-width: 220px; }
+.accounts-audit .audit-order-detail td:last-child { white-space: normal; }
+.accounts-audit .audit-order-lookup select { padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; background: white; color: inherit; }
+.accounts-audit .audit-name-comparison { background: var(--bg-subtle); padding: 16px; border-radius: 8px; }
+.accounts-audit .data-table tbody tr { cursor: default; }
+.accounts-audit .data-table tbody tr.audit-case-row { cursor: pointer; }
+
+.accounts-audit .audit-customer-selects label { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 200px; }
+.accounts-audit .audit-customer-selects select { width: 100%; min-height: 40px; }
+.accounts-audit .audit-quantity .table-scroll-container { max-height: 520px; overflow: auto; }
+.accounts-audit .audit-quantity td:first-child { min-width: 245px; max-width: 360px; white-space: normal; }
+.accounts-audit .audit-quantity th:first-child { position: sticky; left: 0; z-index: 12; }
+.accounts-audit .audit-quantity tbody td:first-child { position: sticky; left: 0; background: white; z-index: 1; }
+.accounts-audit .audit-quantity td { vertical-align: top; }
+.accounts-audit .audit-quantity th small { font-size: 10px; text-transform: none; }
+.accounts-audit .audit-quantity .audit-link { text-align: left; }
+.accounts-audit .audit-negative-qty { color: var(--google-red); }
+.accounts-audit .audit-direct-lookup { margin: 0 0 24px; padding: 12px 16px; border: 1px solid var(--border); border-radius: 8px; background: white; }
+.accounts-audit .audit-unmatched td:last-child { white-space: normal; min-width: 200px; }
+
+/* Slide-over Drawer styles */
+.accounts-audit .audit-drawer-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 999; display: flex; justify-content: flex-end; opacity: 0; animation: fadeIn 0.2s forwards; }
+.accounts-audit .audit-drawer { width: 100%; max-width: 600px; background: white; height: 100dvh; display: flex; flex-direction: column; transform: translateX(100%); animation: slideIn 0.2s forwards; box-shadow: -4px 0 24px rgba(0,0,0,0.1); }
+.accounts-audit .audit-drawer-header { padding: 20px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: white; z-index: 1; }
+.accounts-audit .audit-drawer-header h2 { font-size: 18px; margin: 0; }
+.accounts-audit .audit-drawer-content { padding: 24px; overflow-y: auto; flex: 1; }
+@keyframes fadeIn { to { opacity: 1; } }
+@keyframes slideIn { to { transform: translateX(0); } }
