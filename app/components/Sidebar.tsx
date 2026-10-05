@@ -241,7 +241,7 @@ export function Sidebar({
     if (collapsed) {
       if (group?.children && group.children.length > 0) {
         const firstChild = group.children.find((child) => isFeatureEnabled(child.featureKey));
-        if (firstChild?.id === "settings_connections") {
+        if (firstChild?.id === "settings_connections_DISABLED") {
           window.location.assign("/connections");
         } else if (firstChild?.id === "tender_hub") {
           window.location.assign("/tender-hub");
@@ -260,7 +260,12 @@ export function Sidebar({
       return;
     }
     
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+    setExpanded((prev) => {
+      const allClosed: Record<string, boolean> = {};
+      Object.keys(prev).forEach((k) => { allClosed[k] = false; });
+      allClosed[id] = !prev[id];
+      return allClosed;
+    });
   };
 
   const isChildActive = (group: NavGroup) =>
@@ -323,7 +328,7 @@ export function Sidebar({
                       type="button"
                       className={`sidebar-child-item ${activeSection === child.id ? "active" : ""}`}
                       onClick={() => {
-                        if (child.id === "settings_connections") {
+                        if (child.id === "settings_connections_DISABLED") {
                           window.location.assign("/connections");
                         } else if (child.id === "tender_hub") {
                           window.location.assign("/tender-hub");

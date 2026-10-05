@@ -39,6 +39,7 @@ import { SettingsModulesView } from "@/app/components/SettingsModulesView";
 
 import { SettingsSkillsView } from "@/app/components/SettingsSkillsView";
 import { UserManagementView } from "@/app/components/UserManagementView";
+import ConnectionControls from "@/app/components/ConnectionControls";
 import { OwnerAuthGate } from "@/app/components/OwnerAuthGate";
 import { InventoryStockView } from "@/app/components/InventoryStockView";
 import { AccountsAuditView } from "@/app/components/AccountsAuditView";
@@ -1146,6 +1147,7 @@ export default function HomePage() {
     report_customer_material: "Customer Material Control Report",
     report_data_quality: "Data Quality",
     report_validation: "Validation Report",
+    settings_connections: "Connections & Permissions",
     settings_sync: "Sync & Local Cache",
     settings_modules: "Modules & Features",
     settings_exclusions: "Exclusion Rules",
@@ -1447,6 +1449,13 @@ export default function HomePage() {
             />
           )}
 
+
+          {/* SETTINGS: CONNECTIONS & PERMISSIONS */}
+          {sidebarSection === "settings_connections" && (
+            <div className="section-card" style={{ padding: 24, maxWidth: 900 }}>
+              <ConnectionControls />
+            </div>
+          )}
 
           {/* 11. SETTINGS: SYNC & LOCAL CACHE */}
           {sidebarSection === "settings_sync" && (

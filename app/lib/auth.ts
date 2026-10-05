@@ -151,6 +151,39 @@ export const ALL_MODULES = [
 
 export type ModuleId = (typeof ALL_MODULES)[number];
 
+
+
+// ---- Function-level Access Control ----
+
+export const MODULE_FUNCTIONS = ["view", "add", "edit", "delete", "export"] as const;
+export type FunctionId = (typeof MODULE_FUNCTIONS)[number];
+
+/**
+ * Module access format supports:
+ *   "*"                     → all modules, all functions
+ *   "dashboard"             → dashboard module, all functions
+ *   "dashboard:view"        → dashboard module, view only
+ *   "dashboard:view,export" → dashboard module, view + export
+ */
+export function hasFunctionAccess(
+  payload: JWTPayload,
+  mod: string,
+  fn: string
+): boolean {
+  if (payload.role === "super_admin") return true;
+  if (payload.modules.includes("*")) return true;
+
+  for (const entry of payload.modules) {
+    const [m, fns] = entry.split(":");
+    if (m !== mod) continue;
+    // "dashboard" (no colon) = all functions
+    if (!fns) return true;
+    // "dashboard:view,export" = specific functions
+    return fns.split(",").includes(fn);
+  }
+  return false;
+}
+
 export function hasModuleAccess(payload: JWTPayload, mod: string): boolean {
   if (payload.role === "super_admin") return true;
   if (payload.modules.includes("*")) return true;
