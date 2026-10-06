@@ -125,3 +125,4 @@ current_schema.sql
 server.log
 stage_v2.py
 *.log
+!app/api/zoho/data/

@@ -1061,7 +1061,22 @@ export default function HomePage() {
     }
     setDisconnecting(true);
     try {
-      await fetch("/api/zoho/disconnect", { method: "POST" });
+      const res = await fetch("/api/zoho/disconnect", { method: "POST" });
+      if (res.status === 409) {
+        const body = await res.json().catch(() => ({}));
+        if (body.envManaged) {
+          setGeneralError(
+            "Production credentials are managed via Vercel environment variables. " +
+            "Remove ZOHO_REFRESH_TOKEN in the Vercel dashboard and redeploy to disconnect."
+          );
+          return;
+        }
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setGeneralError(body.error || "Failed to disconnect");
+        return;
+      }
       setStatus(null);
       setData(null);
       setOrganizations([]);
@@ -1513,7 +1528,15 @@ export default function HomePage() {
                           try {
                             setDisconnecting(true);
                             const res = await fetch(ZOHO_DISCONNECT_ENDPOINT, { method: "POST" });
-                            if (res.ok) {
+                            if (res.status === 409) {
+                              const body = await res.json().catch(() => ({}));
+                              if (body.envManaged) {
+                                setGeneralError(
+                                  "Production credentials are managed via Vercel environment variables. " +
+                                  "Remove ZOHO_REFRESH_TOKEN in the Vercel dashboard and redeploy to disconnect."
+                                );
+                              }
+                            } else if (res.ok) {
                               await fetchStatus();
                               setSyncStatusText("Offline");
                             }

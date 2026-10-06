@@ -18,9 +18,19 @@ import { secureZohoFetch } from "./zoho-security-guard.ts";
 
 // ---- Token management ----
 
+// Single-flight refresh: prevents concurrent requests from independently
+// refreshing the same token. When a refresh is in progress, all callers
+// await the same promise. On completion (success or failure), the
+// in-flight reference is cleared so future refreshes can proceed.
+let refreshInFlight: Promise<string> | null = null;
+
 /**
  * Returns a valid access token, refreshing it automatically if expired.
  * Throws if not connected or refresh fails.
+ *
+ * Uses single-flight semantics: concurrent callers share one refresh
+ * request. Failed refreshes propagate to all waiters and clear the
+ * in-flight lock so the next call can retry.
  */
 export async function getValidAccessToken(): Promise<{
   token: string;
@@ -35,9 +45,21 @@ export async function getValidAccessToken(): Promise<{
     return { token: store.access_token, store };
   }
 
-  // Token expired — refresh it
+  // Token expired — refresh it (single-flight)
   console.log("[ZohoAPI] Access token expired, refreshing...");
-  const refreshed = await refreshAccessToken(store);
+
+  if (refreshInFlight) {
+    // Another caller is already refreshing — wait for the same result
+    const refreshed = await refreshInFlight;
+    return { token: refreshed, store: { ...store, access_token: refreshed } };
+  }
+
+  // Create exactly one refresh promise
+  refreshInFlight = refreshAccessToken(store).finally(() => {
+    refreshInFlight = null;
+  });
+
+  const refreshed = await refreshInFlight;
   return { token: refreshed, store: { ...store, access_token: refreshed } };
 }
 

@@ -1,6 +1,7 @@
 // ============================================================
 // Zoho Token Store — server-side only
-// Stores tokens in .tokens.json in the project root.
+// Dual-mode: filesystem (.tokens.json) for local development,
+// environment-variable bootstrap for Vercel production.
 // NEVER import this in client components.
 // ============================================================
 
@@ -8,58 +9,185 @@ import fs from "fs";
 import path from "path";
 import type { ZohoTokenStore } from "@/app/types/zoho";
 
-// Token file lives at project root, git-ignored
-const TOKEN_FILE = path.join(process.cwd(), ".tokens.json");
+// ---- Environment detection ----
+
+const IS_VERCEL = !!(process.env.VERCEL || process.env.VERCEL_ENV);
+
+// ---- Filesystem provider (local development) ----
+
+const OPERATIONAL_TOKEN_FILE = path.join(process.cwd(), ".tokens.json");
 
 /**
- * Read the token store from disk.
- * Returns null if file doesn't exist or is invalid.
+ * Resolve the token file path.
+ *
+ * In production/development: always returns the operational .tokens.json.
+ * In test mode (NODE_ENV=test): returns BANSIL_TEST_ZOHO_TOKEN_FILE if set,
+ * providing complete isolation from the real token file.
+ *
+ * SAFETY: The test override is evaluated at call time (not module load),
+ * so tests can set the env var before any token operations.
  */
-export function readTokenStore(): ZohoTokenStore | null {
+function resolveTokenFilePath(): string {
+  if (process.env.NODE_ENV === "test" && process.env.BANSIL_TEST_ZOHO_TOKEN_FILE) {
+    const testPath = process.env.BANSIL_TEST_ZOHO_TOKEN_FILE;
+    // Hard safety: never allow test path to resolve to the operational file
+    if (path.resolve(testPath) === path.resolve(OPERATIONAL_TOKEN_FILE)) {
+      throw new Error(
+        "[TokenStore] SAFETY ABORT: Test token path resolves to the operational .tokens.json. " +
+        "Set BANSIL_TEST_ZOHO_TOKEN_FILE to an isolated temporary path."
+      );
+    }
+    return testPath;
+  }
+  return OPERATIONAL_TOKEN_FILE;
+}
+
+function readFromFile(): ZohoTokenStore | null {
   try {
-    if (!fs.existsSync(TOKEN_FILE)) {
+    if (!fs.existsSync(resolveTokenFilePath())) {
       return null;
     }
-    const raw = fs.readFileSync(TOKEN_FILE, "utf-8");
+    const raw = fs.readFileSync(resolveTokenFilePath(), "utf-8");
     const parsed = JSON.parse(raw) as ZohoTokenStore;
-    // Basic validation
     if (!parsed.access_token || !parsed.refresh_token) {
       return null;
     }
     return parsed;
   } catch {
-    // Don't log token content
     console.error("[TokenStore] Failed to read token file");
     return null;
   }
 }
 
-/**
- * Write the token store to disk.
- * Merges with existing data so partial updates are safe.
- */
-export function writeTokenStore(data: Partial<ZohoTokenStore>): void {
+function writeToFile(data: Partial<ZohoTokenStore>): void {
   try {
-    const existing = readTokenStore() ?? ({} as ZohoTokenStore);
+    const existing = readFromFile() ?? ({} as ZohoTokenStore);
     const updated: ZohoTokenStore = { ...existing, ...data } as ZohoTokenStore;
-    fs.writeFileSync(TOKEN_FILE, JSON.stringify(updated, null, 2), "utf-8");
+    fs.writeFileSync(resolveTokenFilePath(), JSON.stringify(updated, null, 2), "utf-8");
   } catch {
     console.error("[TokenStore] Failed to write token file");
     throw new Error("Failed to save authentication tokens");
   }
 }
 
-/**
- * Delete the token store (disconnect).
- */
-export function clearTokenStore(): void {
+function clearFile(): void {
   try {
-    if (fs.existsSync(TOKEN_FILE)) {
-      fs.unlinkSync(TOKEN_FILE);
+    if (fs.existsSync(resolveTokenFilePath())) {
+      fs.unlinkSync(resolveTokenFilePath());
     }
   } catch {
     console.error("[TokenStore] Failed to clear token file");
   }
+}
+
+// ---- Environment-variable provider (Vercel production) ----
+//
+// Required Vercel env vars for Zoho token bootstrap:
+//   ZOHO_REFRESH_TOKEN   — long-lived refresh token from initial OAuth
+//   ZOHO_CLIENT_ID       — already exists
+//   ZOHO_CLIENT_SECRET   — already exists
+//   ZOHO_ACCOUNTS_URL    — already exists (e.g. https://accounts.zoho.com)
+//   ZOHO_API_DOMAIN      — e.g. https://www.zohoapis.in
+//   ZOHO_DEFAULT_ORG_ID  — already exists
+//
+// Optional:
+//   ZOHO_LOCATION        — datacenter location (e.g. "in", "com")
+//   ZOHO_ORG_NAME        — display name for the organization
+//   ZOHO_CURRENCY_CODE   — e.g. "INR"
+//   ZOHO_CURRENCY_SYMBOL — e.g. "₹"
+//
+// The access token is obtained at runtime via refresh and cached
+// in-memory for the lifetime of the serverless function instance.
+
+// In-memory cache for the current serverless invocation.
+// Survives across requests within the same warm instance (~5–15 min).
+let envTokenCache: ZohoTokenStore | null = null;
+
+function readFromEnv(): ZohoTokenStore | null {
+  // Return in-memory cache if it exists (handles refreshed access tokens)
+  if (envTokenCache) {
+    return envTokenCache;
+  }
+
+  const refreshToken = process.env.ZOHO_REFRESH_TOKEN;
+  const clientId = process.env.ZOHO_CLIENT_ID;
+  const accountsUrl = process.env.ZOHO_ACCOUNTS_URL;
+  const apiDomain = process.env.ZOHO_API_DOMAIN;
+
+  if (!refreshToken || !clientId || !accountsUrl || !apiDomain) {
+    // Not enough env vars to bootstrap — Zoho not configured for production
+    return null;
+  }
+
+  const store: ZohoTokenStore = {
+    access_token: "",          // Will be obtained via refresh
+    refresh_token: refreshToken,
+    expires_at: 0,             // Forces immediate refresh on first use
+    api_domain: apiDomain,
+    accounts_url: accountsUrl,
+    location: process.env.ZOHO_LOCATION || "com",
+    organization_id: process.env.ZOHO_DEFAULT_ORG_ID,
+    organization_name: process.env.ZOHO_ORG_NAME,
+    currency_code: process.env.ZOHO_CURRENCY_CODE,
+    currency_symbol: process.env.ZOHO_CURRENCY_SYMBOL,
+  };
+
+  envTokenCache = store;
+  return store;
+}
+
+function writeToEnv(data: Partial<ZohoTokenStore>): void {
+  // On Vercel, we can only cache in memory — no persistent writes.
+  // This is sufficient: the access token lives ~1 hour and the warm
+  // instance typically recycles within ~15 minutes. On cold start,
+  // getValidAccessToken() in zoho-api.ts sees expires_at=0 and
+  // refreshes automatically.
+  const existing = envTokenCache ?? readFromEnv() ?? ({} as ZohoTokenStore);
+  envTokenCache = { ...existing, ...data } as ZohoTokenStore;
+}
+
+function clearEnv(): void {
+  envTokenCache = null;
+}
+
+// ---- Public API (unchanged signatures) ----
+
+/**
+ * Read the token store.
+ * On local: reads from .tokens.json
+ * On Vercel: bootstraps from env vars + in-memory cache
+ */
+export function readTokenStore(): ZohoTokenStore | null {
+  if (IS_VERCEL) {
+    return readFromEnv();
+  }
+  return readFromFile();
+}
+
+/**
+ * Write to the token store.
+ * On local: merges into .tokens.json
+ * On Vercel: updates in-memory cache only
+ */
+export function writeTokenStore(data: Partial<ZohoTokenStore>): void {
+  if (IS_VERCEL) {
+    writeToEnv(data);
+    return;
+  }
+  writeToFile(data);
+}
+
+/**
+ * Delete the token store (disconnect).
+ * On local: removes .tokens.json
+ * On Vercel: clears in-memory cache
+ */
+export function clearTokenStore(): void {
+  if (IS_VERCEL) {
+    clearEnv();
+    return;
+  }
+  clearFile();
 }
 
 /**
