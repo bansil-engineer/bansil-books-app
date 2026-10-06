@@ -18,20 +18,41 @@ const IS_VERCEL = !!(process.env.VERCEL || process.env.VERCEL_ENV);
 const OPERATIONAL_TOKEN_FILE = path.join(process.cwd(), ".tokens.json");
 
 /**
- * Resolve the token file path.
+ * Resolve the token file path — FAIL-CLOSED design.
  *
- * In production/development: always returns the operational .tokens.json.
- * In test mode (NODE_ENV=test): returns BANSIL_TEST_ZOHO_TOKEN_FILE if set,
- * providing complete isolation from the real token file.
+ * NORMAL (NODE_ENV !== "test"): returns the operational .tokens.json.
  *
- * SAFETY: The test override is evaluated at call time (not module load),
- * so tests can set the env var before any token operations.
+ * TEST (NODE_ENV === "test"):
+ *   - BANSIL_TEST_ZOHO_TOKEN_FILE MUST be set → THROWS if missing.
+ *   - The test path must NOT resolve to the operational file → THROWS if equal.
+ *   - There is NO fallback from test mode to the operational file.
+ *
+ * SAFETY: Evaluated at call time (not module load), using path.resolve()
+ * and path.normalize() to prevent relative-path bypass.
+ *
+ * R4 FIX: Prior design (R3) fell through to the operational file when
+ * BANSIL_TEST_ZOHO_TOKEN_FILE was absent in test mode. This caused
+ * incident: test fixture data overwrote the operational .tokens.json
+ * when tests ran under ts-node CommonJS mode.
  */
 function resolveTokenFilePath(): string {
-  if (process.env.NODE_ENV === "test" && process.env.BANSIL_TEST_ZOHO_TOKEN_FILE) {
+  if (process.env.NODE_ENV === "test") {
+    // FAIL-CLOSED: test mode REQUIRES an explicit isolated token path.
+    // If BANSIL_TEST_ZOHO_TOKEN_FILE is not set, refuse to operate
+    // rather than falling through to the operational file.
     const testPath = process.env.BANSIL_TEST_ZOHO_TOKEN_FILE;
+    if (!testPath) {
+      throw new Error(
+        "[TokenStore] SAFETY ABORT: NODE_ENV=test but BANSIL_TEST_ZOHO_TOKEN_FILE " +
+        "is not set. Test mode REQUIRES an explicit isolated token file path. " +
+        "Set BANSIL_TEST_ZOHO_TOKEN_FILE to an os.tmpdir()-based path before " +
+        "importing or calling any token store functions."
+      );
+    }
     // Hard safety: never allow test path to resolve to the operational file
-    if (path.resolve(testPath) === path.resolve(OPERATIONAL_TOKEN_FILE)) {
+    const resolvedTest = path.resolve(testPath);
+    const resolvedOps = path.resolve(OPERATIONAL_TOKEN_FILE);
+    if (resolvedTest === resolvedOps || path.normalize(testPath) === path.normalize(OPERATIONAL_TOKEN_FILE)) {
       throw new Error(
         "[TokenStore] SAFETY ABORT: Test token path resolves to the operational .tokens.json. " +
         "Set BANSIL_TEST_ZOHO_TOKEN_FILE to an isolated temporary path."
@@ -42,12 +63,33 @@ function resolveTokenFilePath(): string {
   return OPERATIONAL_TOKEN_FILE;
 }
 
+/**
+ * Second safety barrier: explicitly reject writes/deletes to the operational
+ * token file when in test mode, regardless of what resolveTokenFilePath returns.
+ * This is defense-in-depth against any path resolution bypass.
+ */
+function assertNotOperationalInTestMode(resolvedPath: string): void {
+  if (process.env.NODE_ENV === "test") {
+    const normalizedResolved = path.resolve(resolvedPath);
+    const normalizedOps = path.resolve(OPERATIONAL_TOKEN_FILE);
+    if (normalizedResolved === normalizedOps) {
+      throw new Error(
+        "[TokenStore] SAFETY ABORT: Attempted to write/delete the operational " +
+        ".tokens.json while in test mode. This is a test isolation violation."
+      );
+    }
+  }
+}
+
+
 function readFromFile(): ZohoTokenStore | null {
+  // Safety check OUTSIDE try/catch — its error must propagate immediately
+  const filePath = resolveTokenFilePath();
   try {
-    if (!fs.existsSync(resolveTokenFilePath())) {
+    if (!fs.existsSync(filePath)) {
       return null;
     }
-    const raw = fs.readFileSync(resolveTokenFilePath(), "utf-8");
+    const raw = fs.readFileSync(filePath, "utf-8");
     const parsed = JSON.parse(raw) as ZohoTokenStore;
     if (!parsed.access_token || !parsed.refresh_token) {
       return null;
@@ -60,10 +102,13 @@ function readFromFile(): ZohoTokenStore | null {
 }
 
 function writeToFile(data: Partial<ZohoTokenStore>): void {
+  // Safety checks OUTSIDE try/catch — their errors must propagate immediately
+  const filePath = resolveTokenFilePath();
+  assertNotOperationalInTestMode(filePath);
   try {
     const existing = readFromFile() ?? ({} as ZohoTokenStore);
     const updated: ZohoTokenStore = { ...existing, ...data } as ZohoTokenStore;
-    fs.writeFileSync(resolveTokenFilePath(), JSON.stringify(updated, null, 2), "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), "utf-8");
   } catch {
     console.error("[TokenStore] Failed to write token file");
     throw new Error("Failed to save authentication tokens");
@@ -71,9 +116,12 @@ function writeToFile(data: Partial<ZohoTokenStore>): void {
 }
 
 function clearFile(): void {
+  // Safety checks OUTSIDE try/catch — their errors must propagate immediately
+  const filePath = resolveTokenFilePath();
+  assertNotOperationalInTestMode(filePath);
   try {
-    if (fs.existsSync(resolveTokenFilePath())) {
-      fs.unlinkSync(resolveTokenFilePath());
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
   } catch {
     console.error("[TokenStore] Failed to clear token file");

@@ -1,6 +1,6 @@
 import { getAuditDatabase } from "../db/audit-database.js";
 import { getDatabase } from "../db/database.js";
-import { readTokenStore } from "../zoho-token-store.js";
+import { readTokenStore } from "../zoho-token-store";
 import { listCashAccountTransactions } from "./accounts/zoho-read-source.js";
 import { advanceWatermarkSuccess, recordWatermarkAttempt } from "./pre-audit-sync-service.js";
 
