@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifyTokenEdge } from "@/app/lib/auth-edge";
 
 const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/setup", "/api/auth/status", "/api/zoho/callback"];
 
@@ -8,7 +9,7 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Allow public auth paths
@@ -41,32 +42,29 @@ export function middleware(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Basic JWT structure + expiration check (Edge Runtime cannot use
-  // node:crypto, so full signature verification happens in API routes)
-  const parts = token.split(".");
-  if (parts.length !== 3) {
+  // ================================================================
+  // P0 SECURITY FIX: Full HMAC-SHA256 signature verification
+  //
+  // Previously this block only checked JWT structure and expiration,
+  // allowing forged tokens with valid structure to pass through.
+  // Now uses Web Crypto API (Edge-compatible) to cryptographically
+  // verify the signature before allowing any request through.
+  //
+  // FAIL CLOSED: any verification failure → reject immediately.
+  // ================================================================
+  const payload = await verifyTokenEdge(token);
+
+  if (!payload) {
+    // Token is invalid: malformed, expired, forged, or bad signature.
+    // Clear the cookie so the browser doesn't keep sending it.
     if (!pathname.startsWith("/api/")) {
       const res = NextResponse.redirect(new URL("/login", request.url));
       res.cookies.delete("bansil_auth");
       return res;
     }
-    return NextResponse.json({ error: "Invalid token" }, { status: 401 });
-  }
-
-  try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1], "base64url").toString("utf-8")
-    );
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      const res = !pathname.startsWith("/api/")
-        ? NextResponse.redirect(new URL("/login", request.url))
-        : NextResponse.json({ error: "Token expired" }, { status: 401 });
-      res.cookies.delete("bansil_auth");
-      return res;
-    }
-  } catch {
-    // If payload parse fails, let it through — API route will reject
+    const res = NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    res.cookies.delete("bansil_auth");
+    return res;
   }
 
   return NextResponse.next();
