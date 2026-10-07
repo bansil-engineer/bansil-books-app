@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isOwnerBootstrapped, isValidOwnerSession, OWNER_SESSION_COOKIE } from "@/app/lib/audit/owner-auth";
+import { isOwnerBootstrapped, isValidOwnerSession, isVercelSetupRequired, OWNER_SESSION_COOKIE } from "@/app/lib/audit/owner-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -9,5 +9,8 @@ export async function GET(req: NextRequest) {
     success: true,
     bootstrapped: isOwnerBootstrapped(),
     authenticated: isValidOwnerSession(token),
+    // On Vercel without env-var credentials: tells the client to show
+    // a setup-required message instead of the broken "set one-time" form.
+    vercelSetupRequired: isVercelSetupRequired(),
   });
 }

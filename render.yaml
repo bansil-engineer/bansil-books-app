@@ -1,0 +1,44 @@
+# ============================================================
+# Bansil Books — Render Infrastructure-as-Code
+# Phase 1: Single-instance Next.js + SQLite
+#
+# SAFETY: No secrets, tokens, or credential values in this file.
+#         All secrets are set in the Render dashboard.
+# ============================================================
+
+services:
+  - type: web
+    name: bansil-books
+    runtime: docker
+    plan: starter
+    region: singapore
+    # Single instance REQUIRED — SQLite is the temporary
+    # authoritative store. Do not enable autoscaling.
+    numInstances: 1
+    healthCheckPath: /
+    envVars:
+      # --- Database paths (persistent disk) ---
+      - key: BANSIL_RUNTIME_DB_DIR
+        value: /app/data
+      - key: BANSIL_ZOHO_TOKEN_FILE
+        value: /app/data/.tokens.json
+      # --- Zoho OAuth (secrets — set in Render dashboard) ---
+      - key: ZOHO_CLIENT_ID
+        sync: false
+      - key: ZOHO_CLIENT_SECRET
+        sync: false
+      - key: ZOHO_REFRESH_TOKEN
+        sync: false
+      - key: ZOHO_ACCOUNTS_URL
+        sync: false
+      - key: ZOHO_API_DOMAIN
+        sync: false
+      - key: ZOHO_DEFAULT_ORG_ID
+        sync: false
+      # --- Owner Auth (secrets — set in Render dashboard) ---
+      - key: AUTH_SECRET
+        sync: false
+    disk:
+      name: bansil-data
+      mountPath: /app/data
+      sizeGB: 1

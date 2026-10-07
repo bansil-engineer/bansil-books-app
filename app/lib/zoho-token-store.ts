@@ -20,7 +20,11 @@ const OPERATIONAL_TOKEN_FILE = path.join(process.cwd(), ".tokens.json");
 /**
  * Resolve the token file path — FAIL-CLOSED design.
  *
- * NORMAL (NODE_ENV !== "test"): returns the operational .tokens.json.
+ * NORMAL (NODE_ENV !== "test"):
+ *   - If BANSIL_ZOHO_TOKEN_FILE is set → returns that path (resolved absolute).
+ *     Use this on a persistent host to place the token file on a durable
+ *     volume, e.g. BANSIL_ZOHO_TOKEN_FILE=/app/data/.tokens.json
+ *   - Otherwise → returns the operational .tokens.json at process.cwd().
  *
  * TEST (NODE_ENV === "test"):
  *   - BANSIL_TEST_ZOHO_TOKEN_FILE MUST be set → THROWS if missing.
@@ -60,6 +64,13 @@ function resolveTokenFilePath(): string {
     }
     return testPath;
   }
+  // Explicit override for persistent hosting or custom token file location.
+  // Example: BANSIL_ZOHO_TOKEN_FILE=/app/data/.tokens.json
+  const override = process.env.BANSIL_ZOHO_TOKEN_FILE;
+  if (override) {
+    return path.resolve(override);
+  }
+
   return OPERATIONAL_TOKEN_FILE;
 }
 
@@ -106,6 +117,13 @@ function writeToFile(data: Partial<ZohoTokenStore>): void {
   const filePath = resolveTokenFilePath();
   assertNotOperationalInTestMode(filePath);
   try {
+    // Ensure parent directory exists (needed when BANSIL_ZOHO_TOKEN_FILE
+    // points to a path whose parent hasn't been created yet, e.g.
+    // /app/data/.tokens.json on first container start with empty volume).
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
     const existing = readFromFile() ?? ({} as ZohoTokenStore);
     const updated: ZohoTokenStore = { ...existing, ...data } as ZohoTokenStore;
     fs.writeFileSync(filePath, JSON.stringify(updated, null, 2), "utf-8");

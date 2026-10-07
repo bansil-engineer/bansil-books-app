@@ -13,11 +13,15 @@ interface OwnerAuthGateProps {
  * component only avoids showing privileged controls to a signed-out
  * viewer and offers the sign-in/bootstrap form. A disabled button here is
  * never the only protection.
+ *
+ * On Vercel when env-var credentials are not configured, shows a clear
+ * "setup required" message instead of the broken "set one-time" form.
  */
 export function OwnerAuthGate({ children }: OwnerAuthGateProps) {
   const [loading, setLoading] = useState(true);
   const [bootstrapped, setBootstrapped] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [vercelSetupRequired, setVercelSetupRequired] = useState(false);
   const [passphrase, setPassphrase] = useState("");
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +41,11 @@ export function OwnerAuthGate({ children }: OwnerAuthGateProps) {
       const json = await res.json();
       setBootstrapped(Boolean(json.bootstrapped));
       setAuthenticated(Boolean(json.authenticated));
+      setVercelSetupRequired(Boolean(json.vercelSetupRequired));
     } catch {
       setBootstrapped(false);
       setAuthenticated(false);
+      setVercelSetupRequired(false);
     } finally {
       setLoading(false);
     }
@@ -149,6 +155,34 @@ export function OwnerAuthGate({ children }: OwnerAuthGateProps) {
 
   if (loading) {
     return <div style={{ padding: 30, textAlign: "center", color: "#64748b" }}>Checking owner session…</div>;
+  }
+
+  // Vercel production: env-var credentials not configured
+  if (vercelSetupRequired) {
+    return (
+      <div style={{ maxWidth: 480, margin: "40px auto", border: "1px solid #fbbf24", borderRadius: 8, padding: 24, background: "#fffbeb" }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8, color: "#92400e" }}>Owner Passphrase Setup Required</h3>
+        <p style={{ fontSize: 12.5, color: "#78350f", marginBottom: 16, lineHeight: 1.5 }}>
+          Owner passphrase authentication is not yet configured for production.
+          A super_admin must set the <code style={{ background: "#fef3c7", padding: "1px 4px", borderRadius: 2 }}>OWNER_PASSPHRASE_HASH</code> and{" "}
+          <code style={{ background: "#fef3c7", padding: "1px 4px", borderRadius: 2 }}>OWNER_PASSPHRASE_SALT</code> environment
+          variables in the Vercel dashboard and redeploy.
+        </p>
+        <p style={{ fontSize: 11.5, color: "#92400e", lineHeight: 1.5 }}>
+          To generate these values, run the following on your local development machine:
+        </p>
+        <pre style={{ background: "#fef3c7", padding: 12, borderRadius: 4, fontSize: 11.5, overflowX: "auto", marginTop: 8, color: "#78350f" }}>
+{`node -e "
+  const crypto = require('crypto');
+  const passphrase = '<YOUR_PASSPHRASE>';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(passphrase, salt, 64).toString('hex');
+  console.log('OWNER_PASSPHRASE_SALT=' + salt);
+  console.log('OWNER_PASSPHRASE_HASH=' + hash);
+"`}
+        </pre>
+      </div>
+    );
   }
 
   if (!bootstrapped) {
