@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/db/database";
 import { formatDisplayDateTime, formatDisplayDate } from "@/app/lib/date-utils";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { requireOwnerSessionOrForbid } from "@/app/lib/audit/api-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // C-1: Owner-only guard — sync mutation is a privileged operation.
+  // Middleware already verified JWT (401 for unauthenticated);
+  // this returns 403 for authenticated-but-not-Owner users.
+  const denied = await requireOwnerSessionOrForbid(request);
+  if (denied) return denied;
+
   const disabled = requireFeaturesEnabled("action_zoho_manual_sync");
   if (disabled) return disabled;
   try {

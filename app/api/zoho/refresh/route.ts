@@ -1,11 +1,15 @@
 // POST /api/zoho/refresh
 // Manually triggers an access token refresh.
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { readTokenStore } from "@/app/lib/zoho-token-store";
 import { refreshAccessToken } from "@/app/lib/zoho-api";
+import { requireOwnerSessionOrForbid } from "@/app/lib/audit/api-guard";
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // C-1: Owner-only guard — manual token refresh is a privileged operation.
+  const denied = await requireOwnerSessionOrForbid(request);
+  if (denied) return denied;
   try {
     const store = readTokenStore();
 

@@ -7,13 +7,18 @@ import { assertConnectionAllowed } from '@/app/lib/external-connections.cjs';
 // the client was registered). Zoho returns `location` and `accounts-server`
 // in the callback, which we use for the token exchange and all future API calls.
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   APPROVED_ZOHO_READ_SCOPES,
   assertApprovedScopes,
 } from "@/app/lib/zoho-security-guard";
+import { requireOwnerSessionOrForbid } from "@/app/lib/audit/api-guard";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  // C-1: Owner-only guard — initiating OAuth is a privileged operation.
+  const denied = await requireOwnerSessionOrForbid(request);
+  if (denied) return denied;
+
   try { assertConnectionAllowed("zoho"); } catch { return NextResponse.json({ error: "Zoho app access disconnected. Enable it in Connections first." }, { status: 403 }); }
   const clientId = process.env.ZOHO_CLIENT_ID;
   const redirectUri = process.env.ZOHO_REDIRECT_URI;

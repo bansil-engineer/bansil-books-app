@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { clearTokenStore } from "@/app/lib/zoho-token-store";
+import { requireOwnerSessionOrForbid } from "@/app/lib/audit/api-guard";
 
 export const dynamic = "force-dynamic";
 
 const IS_VERCEL = !!(process.env.VERCEL || process.env.VERCEL_ENV);
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  // C-1: Owner-only guard — disconnecting sync clears tokens.
+  const denied = await requireOwnerSessionOrForbid(request);
+  if (denied) return denied;
   try {
     // On Vercel with env-managed credentials: refuse to fake a disconnect
     if (IS_VERCEL && process.env.ZOHO_REFRESH_TOKEN) {

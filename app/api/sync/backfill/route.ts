@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { performFullHistoricalBackfill } from "@/app/lib/db/sync-engine";
 import { getDatabase, getSyncCoverage, isFullBackfillCompleted } from "@/app/lib/db/database";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { requireOwnerSessionOrForbid } from "@/app/lib/audit/api-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // C-1: Owner-only guard — backfill is a privileged sync operation.
+  const denied = await requireOwnerSessionOrForbid(request);
+  if (denied) return denied;
+
   const disabled = requireFeaturesEnabled("action_zoho_manual_sync");
   if (disabled) return disabled;
   try {
