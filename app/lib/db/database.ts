@@ -2190,4 +2190,25 @@ export function setActivitySyncStats(
   setSyncMetadata(db, "last_activity_sync_api_calls", String(stats.apiCallsUsed));
 }
 
+// ============================================================
+// Test Isolation Helper
+// ============================================================
 
+/**
+ * Creates an isolated in-memory SQLite database with the full operational schema.
+ *
+ * SAFETY: This database is NEVER the operational bansil_books.db — it is
+ * ephemeral, lives only in process memory, and is discarded when the
+ * process exits or the reference is released. No data written here reaches
+ * disk or the production database. Test scripts must use this function
+ * instead of getDatabase().
+ *
+ * The `:memory:` URI is passed directly to DatabaseSync; Node.js built-in
+ * sqlite supports this as a standard SQLite in-memory database.
+ */
+export function createTestDatabase(): DatabaseSync {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON;");
+  initDatabase(db);
+  return db;
+}

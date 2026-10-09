@@ -1,3 +1,4 @@
+import { DatabaseSync } from 'node:sqlite';
 import { getDatabase } from '../db/database.ts';
 import { getAuditDatabase } from '../db/audit-database.ts';
 
@@ -17,6 +18,23 @@ export interface UniversalSearchResult {
 
 export class UniversalSearchService {
   /**
+   * Optional test-only constructor args: inject isolated in-memory DBs so tests
+   * never touch the operational bansil_books.db or audit_workspace.db.
+   * Production code calls `new UniversalSearchService()` with no args and keeps
+   * the existing singleton behaviour via getDatabase() / getAuditDatabase().
+   *
+   * NOTE: explicit field declarations (not TS parameter properties) so this file
+   * remains compatible with `node --experimental-strip-types` (strip-only mode).
+   */
+  private readonly _mainDb: DatabaseSync | undefined;
+  private readonly _auditDb: DatabaseSync | undefined;
+
+  constructor(mainDb?: DatabaseSync, auditDb?: DatabaseSync) {
+    this._mainDb = mainDb;
+    this._auditDb = auditDb;
+  }
+
+  /**
    * Search across all local indexed data without making Zoho API calls.
    *
    * ROOT CAUSE FIX (2026-09-16): Multi-word queries like "Philips 250 Watt" were returning
@@ -34,8 +52,8 @@ export class UniversalSearchService {
     const trimmedQuery = query.trim();
     if (!trimmedQuery) return [];
 
-    const db = getDatabase();
-    const auditDb = getAuditDatabase();
+    const db = this._mainDb ?? getDatabase();
+    const auditDb = this._auditDb ?? getAuditDatabase();
     const results: UniversalSearchResult[] = [];
 
     let qLower = trimmedQuery.toLowerCase();

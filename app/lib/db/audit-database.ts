@@ -1904,3 +1904,57 @@ export function updateCheckpointHumanReviewStatus(
     WHERE run_id = ? AND checkpoint_key = ?
   `).run(status, note, new Date().toISOString(), runId, checkpointKey);
 }
+
+// ============================================================
+// Test Isolation Helper
+// ============================================================
+
+/**
+ * Creates an isolated in-memory audit database with the full audit schema.
+ *
+ * SAFETY: This database is NEVER the operational audit_workspace.db — it is
+ * ephemeral, lives only in process memory, and is discarded when the
+ * process exits or the reference is released. Test scripts must use this
+ * function instead of getAuditDatabase().
+ *
+ * Path ':memory:' is passed as a plain string; openAuditDatabaseAt handles
+ * the dirname check (dirname(':memory:') === '.', which always exists).
+ */
+export function createTestAuditDatabase(): DatabaseSync {
+  const db = new DatabaseSync(":memory:");
+  db.exec("PRAGMA foreign_keys = ON;");
+  initAuditDatabase(db);
+  // Also create the traceability tables that live in audit_workspace.db at runtime
+  // but are not part of the AI-workspace schema created by initAuditDatabase().
+  // These are needed by universal-search-service.ts (audit_item_master, audit_sales_orders).
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS audit_item_master (
+      item_id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      name TEXT,
+      sku TEXT,
+      unit TEXT,
+      status TEXT,
+      rate TEXT,
+      item_type TEXT,
+      product_type TEXT,
+      last_modified_time TEXT,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS audit_sales_orders (
+      salesorder_id TEXT PRIMARY KEY,
+      organization_id TEXT NOT NULL,
+      salesorder_number TEXT,
+      customer_id TEXT,
+      customer_name TEXT,
+      date TEXT,
+      status TEXT,
+      reference_number TEXT,
+      total TEXT,
+      last_modified_time TEXT,
+      synced_at TEXT NOT NULL
+    );
+  `);
+  return db;
+}
