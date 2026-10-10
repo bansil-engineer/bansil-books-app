@@ -41,6 +41,10 @@ export interface JWTPayload {
   modules: string[];
   iat: number;
   exp: number;
+  /** OA-U2 (DB store only): session version — must equal auth_users.session_version. */
+  sv?: number;
+  /** OA-U2 (DB store only): unique token id for per-token revocation (logout). */
+  jti?: string;
 }
 
 function getSecret(): string {
@@ -52,7 +56,8 @@ function getSecret(): string {
 
 export function createToken(
   user: { email: string; name: string; role: string; modules: string[] },
-  ttlHours = 24
+  ttlHours = 24,
+  extraClaims?: { sv: number; jti: string }
 ): string {
   const now = Math.floor(Date.now() / 1000);
   const payload: JWTPayload = {
@@ -62,6 +67,8 @@ export function createToken(
     modules: user.modules,
     iat: now,
     exp: now + ttlHours * 3600,
+    // Only DB-store tokens carry sv/jti; env-store tokens are unchanged.
+    ...(extraClaims ? { sv: extraClaims.sv, jti: extraClaims.jti } : {}),
   };
   const hdr = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
   const bdy = b64url(JSON.stringify(payload));

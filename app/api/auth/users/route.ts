@@ -6,6 +6,12 @@ import {
   hashPassword,
   AUTH_COOKIE_NAME,
 } from "../../../lib/auth.ts";
+import { isDbStore, runDbHandler } from "../../../lib/auth-guard.ts";
+import { dbUsersDelete, dbUsersGet, dbUsersPatch, dbUsersPost } from "../../../lib/auth-service.ts";
+
+// OA-U2: when AUTH_USER_STORE=db every handler delegates to the DB-backed
+// service (Owner-only, persistent, audited, no credential material in
+// responses). The env-store code paths below are unchanged.
 
 function requireSuperAdmin(request: NextRequest) {
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;
@@ -17,17 +23,30 @@ function requireSuperAdmin(request: NextRequest) {
 
 // List all users (sans password hashes)
 export async function GET(request: NextRequest) {
+  if (isDbStore()) return runDbHandler(request, dbUsersGet, false);
+
   const admin = requireSuperAdmin(request);
   if (!admin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const users = getAllUsers().map(({ salt, hash, ...rest }) => rest);
-  return NextResponse.json({ users });
+  return NextResponse.json({ store: "env", users });
+}
+
+// Edit / activate / deactivate — DB store only.
+export async function PATCH(request: NextRequest) {
+  if (isDbStore()) return runDbHandler(request, dbUsersPatch);
+  return NextResponse.json(
+    { error: "Editing and activation require the database user store (AUTH_USER_STORE=db)." },
+    { status: 409 }
+  );
 }
 
 // Add a new user — returns updated AUTH_USERS JSON for env var
 export async function POST(request: NextRequest) {
+  if (isDbStore()) return runDbHandler(request, dbUsersPost);
+
   const admin = requireSuperAdmin(request);
   if (!admin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -79,6 +98,8 @@ export async function POST(request: NextRequest) {
 
 // Delete a user — returns updated AUTH_USERS JSON
 export async function DELETE(request: NextRequest) {
+  if (isDbStore()) return runDbHandler(request, dbUsersDelete, false);
+
   const admin = requireSuperAdmin(request);
   if (!admin) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

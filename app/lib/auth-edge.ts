@@ -25,6 +25,8 @@ export interface JWTPayload {
   modules: string[];
   iat: number;
   exp: number;
+  sv?: number;   // OA-U2 DB store: session version (checked server-side in Node, not here)
+  jti?: string;  // OA-U2 DB store: token id for revocation (checked server-side in Node)
 }
 
 // ---- CryptoKey cache ----

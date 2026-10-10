@@ -1,7 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyTokenEdge } from "@/app/lib/auth-edge";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/setup", "/api/auth/status", "/api/zoho/callback"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/api/auth/login",
+  "/api/auth/setup",
+  "/api/auth/status",
+  "/api/zoho/callback",
+  // OA-U2: invitation/reset acceptance (token-authenticated; 404 unless AUTH_USER_STORE=db)
+  "/invite",
+  "/api/auth/invitations/accept",
+];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(

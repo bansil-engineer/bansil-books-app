@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { authenticate, createToken, AUTH_COOKIE_NAME } from "../../../lib/auth.ts";
+import { isDbStore, runDbHandler } from "../../../lib/auth-guard.ts";
+import { dbLogin } from "../../../lib/auth-service.ts";
 
 export async function POST(request: NextRequest) {
+  // OA-U2: DB-backed store (only when AUTH_USER_STORE=db). Env path below is unchanged.
+  if (isDbStore()) return runDbHandler(request, dbLogin);
+
   try {
     const { email, password } = await request.json();
 

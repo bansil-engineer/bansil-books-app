@@ -21,6 +21,20 @@ export function getAuditWorkspaceDbPath(): string {
   return path.join(getRuntimeDbDir(), "audit_workspace.db");
 }
 
+/**
+ * OA-U2: dedicated authentication store (users, permissions, invitations,
+ * token revocations, auth audit log). Deliberately a SEPARATE file from
+ * bansil_books.db / audit_workspace.db so that the paired data-DB swap in
+ * docker-entrypoint.sh can never replace or roll back user accounts.
+ * Only opened when AUTH_USER_STORE=db (see app/lib/auth-store.ts).
+ */
+export function getAuthDbPath(): string {
+  if (process.env.AUTH_DB_PATH) {
+    return path.resolve(process.env.AUTH_DB_PATH);
+  }
+  return path.join(getRuntimeDbDir(), "auth.db");
+}
+
 export function getAiWorkspaceDbPath(): string {
   if (process.env.AI_WORKSPACE_DB_PATH) {
     return path.resolve(process.env.AI_WORKSPACE_DB_PATH);

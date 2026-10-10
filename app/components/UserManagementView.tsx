@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthProvider";
+import { UserManagementDbView } from "./UserManagementDbView";
 
 interface UserRecord {
   email: string;
@@ -83,12 +84,15 @@ export function UserManagementView() {
   const [modulePerms, setModulePerms] = useState<Record<string, string[]>>({});
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  // OA-U2: which user store the server is using ("env" = AUTH_USERS, "db" = auth.db)
+  const [store, setStore] = useState<"env" | "db">("env");
 
   const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/users");
       if (!res.ok) { setError("Failed to load users"); return; }
       const data = await res.json();
+      if (data.store === "db") setStore("db");
       setUsers(data.users || []);
     } catch { setError("Network error"); }
     finally { setLoading(false); }
@@ -244,6 +248,9 @@ export function UserManagementView() {
   }
 
   if (loading) return <div className="section-card" style={{ padding: 24 }}>Loading users...</div>;
+
+  // OA-U2: database store has its own persistent, audited management view.
+  if (store === "db") return <UserManagementDbView />;
 
   return (
     <div className="section-card" style={{ padding: 24, maxWidth: 960 }}>
