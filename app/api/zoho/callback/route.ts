@@ -14,10 +14,39 @@
 import * as fs from "fs";
 import path from "path";
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import { writeTokenStore } from "@/app/lib/zoho-token-store";
-import { secureZohoFetch } from "@/app/lib/zoho-security-guard";
+import { isZohoAccountsHost, secureZohoFetch } from "@/app/lib/zoho-security-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
+
+/** P0-SECURITY-FINAL: Zoho's accounts-server must be an official Zoho accounts origin. */
+function isValidAccountsServer(value: string): boolean {
+  try {
+    const u = new URL(value);
+    return u.protocol === "https:" && isZohoAccountsHost(u.hostname) && !u.port && !u.username &&
+      !u.password && (u.pathname === "/" || u.pathname === "") && !u.search && !u.hash;
+  } catch {
+    return false;
+  }
+}
+
+function sameState(a: string, b: string): boolean {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("zoho/callback", "GET"), "zoho/callback GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
+  // P0-SECURITY-FINAL: completing OAuth REPLACES the stored Zoho connection, so
+  // only the live Owner may do it. The Owner passphrase cookie is SameSite=Strict
+  // and is NOT sent on Zoho's cross-site redirect; the passphrase requirement is
+  // inherited instead through the single-use, HttpOnly state cookie that only the
+  // passphrase-gated /api/zoho/connect issues (checked below). Refusals never
+  // touch the existing tokens.
+
   const { searchParams } = new URL(request.url);
 
   const code = searchParams.get("code");
@@ -46,10 +75,18 @@ export async function GET(request: NextRequest) {
   const stateParam = searchParams.get("state");
   const expectedState = request.cookies.get("zoho_oauth_state")?.value;
 
-  if (!stateParam || !expectedState || stateParam !== expectedState) {
+  if (!stateParam || !expectedState || !sameState(stateParam, expectedState)) {
     const msg = encodeURIComponent("OAuth state validation failed. CSRF protection blocked the request.");
     const response = NextResponse.redirect(new URL(`/?error=${msg}`, request.url));
     // Clear the stale cookie
+    response.cookies.delete("zoho_oauth_state");
+    return response;
+  }
+
+  // P0-SECURITY-FINAL: reject any accounts-server that is not an official Zoho accounts origin.
+  if (accountsServerParam !== null && !isValidAccountsServer(accountsServerParam)) {
+    const msg = encodeURIComponent("Zoho callback rejected: unexpected accounts-server.");
+    const response = NextResponse.redirect(new URL(`/?error=${msg}`, request.url));
     response.cookies.delete("zoho_oauth_state");
     return response;
   }
@@ -191,7 +228,9 @@ export async function GET(request: NextRequest) {
     // Log full error server-side for debugging, but never log tokens or secrets
     console.error("[ZohoCallback] Token exchange error:", message);
     const msg = encodeURIComponent(message);
-    return NextResponse.redirect(new URL(`/?error=${msg}`, request.url));
+    const response = NextResponse.redirect(new URL(`/?error=${msg}`, request.url));
+    response.cookies.delete("zoho_oauth_state"); // state is single-use
+    return response;
   }
 }
 

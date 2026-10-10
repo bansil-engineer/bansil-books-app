@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import { timingSafeEqual } from "node:crypto";
 import { Store } from "@/tools/chatgpt-antigravity-orchestrator/src/store.ts";
 import { runTask } from "@/tools/chatgpt-antigravity-orchestrator/src/engine.ts";
 import { configStatus, configureSecret, configureSecrets, configureWorkflow, currentSecrets, usageStatus, workflowStatus } from "@/tools/chatgpt-antigravity-orchestrator/src/providers.ts";
@@ -15,14 +16,28 @@ type Active = { promise: Promise<void>; controller: AbortController };
 type RuntimeState = { store: Store; vault: SecretsVault; active: Map<string, Active>; token: string };
 const globalRuntime = globalThis as typeof globalThis & { __bansilOrchestrator?: RuntimeState };
 
+/**
+ * P0-SECURITY-FINAL: no fallback token. The Owner token authenticates every
+ * request AND is the key of the API-key vault, so a missing, short or
+ * previously-published value fails CLOSED (503) before anything is opened.
+ */
+const PUBLISHED_TOKENS = new Set(["bansil-orchestrator-owner-20260918"]); // was hard-coded in source: never accept
+function configuredOwnerToken(): string {
+  const token = process.env.ORCHESTRATOR_OWNER_TOKEN ?? "";
+  if (token.length < 20 || PUBLISHED_TOKENS.has(token)) {
+    throw new WorkflowError("Orchestrator disabled: ORCHESTRATOR_OWNER_TOKEN is not configured (minimum 20 characters).", 503);
+  }
+  return token;
+}
+
 function runtimeState() {
   if (globalRuntime.__bansilOrchestrator) return globalRuntime.__bansilOrchestrator;
+  const token = configuredOwnerToken();
   const root = process.cwd();
   process.env.ORCHESTRATOR_PROJECT_DIR ||= root;
   process.env.ORCHESTRATOR_PYTHON ||= path.join(root, "tools/chatgpt-antigravity-orchestrator/.venv/bin/python");
   process.env.ORCHESTRATOR_OPENAI_MODEL ||= "gpt-4.1-mini";
   process.env.ORCHESTRATOR_CLAUDE_MODEL ||= "claude-sonnet-5";
-  const token = process.env.ORCHESTRATOR_OWNER_TOKEN || "bansil-orchestrator-owner-20260918";
   const dataDir = path.join(root, "tools/chatgpt-antigravity-orchestrator/data");
   const vault = new SecretsVault(token, path.join(dataDir, "api-keys.enc"));
   const saved = vault.load();
@@ -54,7 +69,11 @@ async function payload(request: Request) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new WorkflowError("Invalid JSON", 400);
   return value as Record<string, unknown>;
 }
-function auth(request: Request, state: RuntimeState) { if (request.headers.get("x-orchestrator-token") !== state.token) throw new WorkflowError("Owner token required", 401); }
+function auth(request: Request, state: RuntimeState) {
+  const given = Buffer.from(request.headers.get("x-orchestrator-token") ?? "");
+  const expected = Buffer.from(state.token);
+  if (given.length !== expected.length || !timingSafeEqual(given, expected)) throw new WorkflowError("Owner token required", 401);
+}
 type Context = { params: Promise<{ segments?: string[] }> };
 
 async function handle(request: Request, context: Context) {

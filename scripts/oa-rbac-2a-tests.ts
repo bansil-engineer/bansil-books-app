@@ -790,9 +790,136 @@ await test("FE5 dashboard viewer: removal from AUTH_USERS revokes the 3 Dashboar
   } finally { setAuthUsers(BASE_USERS); }
 });
 
+// ------------------------------------------------------------------ P0-SECURITY-FINAL
+section("P0-SECURITY-FINAL — Zoho OAuth callback + orchestrator token");
+{
+  const oa = await import(lib("audit/owner-auth.ts"));
+  if (!oa.isOwnerBootstrapped()) oa.bootstrapOwnerPassphrase("Synthetic-Owner-Passphrase-123");
+  const sess = oa.attemptOwnerLogin("Synthetic-Owner-Passphrase-123")!;
+  const TOKEN_FILE = process.env.BANSIL_ZOHO_TOKEN_FILE!;
+  const cb = await import(pathToFileURL(path.join(ROOT, "app/api/zoho/callback/route.ts")).href);
+  const STATE = "3f1c2b7e-5d4a-4e8f-9a1b-2c3d4e5f6a7b";
+  const call = async (q: string, cookies: Record<string, string>) => {
+    const cookie = Object.entries(cookies).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("; ");
+    return cb.GET(new NextRequest(`http://localhost/api/zoho/callback?${q}`, { headers: cookie ? { cookie } : {} }));
+  };
+  const attack = `code=ATTACKER-CODE&state=${STATE}&accounts-server=${encodeURIComponent("https://accounts.zoho.com")}&location=com`;
+  // before === null: an authenticated Owner passphrase session legitimately refreshes its own
+  // last_seen_at in the (temp) audit DB, so only the token store + network are asserted.
+  const noTouch = (label: string, net: number, before: string | null) => {
+    assert.equal(fs.existsSync(TOKEN_FILE), false, `${label}: token store written`);
+    assert.equal(fetchCalls, net, `${label}: network/token exchange attempted`);
+    if (before !== null) assert.equal(snapshot(), before, `${label}: data changed`);
+  };
+  await test("Z1 callback with NO session (the curl attack, attacker-chosen state cookie) → 401; no exchange; tokens untouched", async () => {
+    const net = fetchCalls, before = snapshot();
+    const r = await call(attack, { zoho_oauth_state: STATE });
+    assert.equal(r.status, 401);
+    noTouch("Z1", net, before);
+  });
+  await test("Z2 callback as an authenticated NON-Owner (employee / dashboard viewer) → 403; no exchange", async () => {
+    for (const t of [T_EMP, T_DASH, T_VIEW]) {
+      const net = fetchCalls, before = snapshot();
+      const r = await call(attack, { bansil_auth: t, zoho_oauth_state: STATE, bansil_owner_session: sess.token });
+      assert.equal(r.status, 403);
+      noTouch("Z2", net, before);
+    }
+  });
+  await test("Z3 live Owner but NO state cookie (state not issued by the passphrase-gated connect) → refused; forged super_admin JWT for a removed user → 401", async () => {
+    let net = fetchCalls, before = snapshot();
+    const r0 = await call(attack, { bansil_auth: T_OWNER });
+    assert.equal(r0.status, 307); assert.match(decodeURIComponent(r0.headers.get("location") ?? ""), /state validation failed/);
+    noTouch("Z3a", net, before);
+    net = fetchCalls; before = snapshot();
+    const ghost = tok("ghost@synthetic.test", "super_admin", ["*"]);
+    assert.equal((await call(attack, { bansil_auth: ghost, zoho_oauth_state: STATE, bansil_owner_session: sess.token })).status, 401);
+    noTouch("Z3b", net, before);
+  });
+  // Real redirect from Zoho: the SameSite=Strict passphrase cookie is NOT sent; the Lax login cookie is.
+  const owner = { bansil_auth: T_OWNER };
+  await test("Z4 Owner + passphrase session but state missing / mismatched → refused (redirect with error); no exchange", async () => {
+    for (const [q, c] of [[attack, {}], [attack, { zoho_oauth_state: "other-state" }], [`code=X&accounts-server=${encodeURIComponent("https://accounts.zoho.com")}`, { zoho_oauth_state: STATE }]] as const) {
+      const net = fetchCalls, before = null;
+      process.env.ZOHO_CLIENT_ID = "synthetic-client-id"; process.env.ZOHO_CLIENT_SECRET = "synthetic-client-secret"; process.env.ZOHO_REDIRECT_URI = "http://localhost/api/zoho/callback";
+      let r: Response;
+      try { r = await call(q, { ...owner, ...c }); }
+      finally { delete process.env.ZOHO_CLIENT_ID; delete process.env.ZOHO_CLIENT_SECRET; delete process.env.ZOHO_REDIRECT_URI; }
+      assert.equal(r.status, 307);
+      // must be refused BY THE STATE CHECK (credentials are configured, so nothing later would refuse it)
+      assert.match(decodeURIComponent(r.headers.get("location") ?? ""), /state validation failed/);
+      noTouch("Z4", net, before);
+    }
+  });
+  await test("Z5 Owner + valid state but non-Zoho / malformed accounts-server → refused BEFORE any exchange (client secret never sent)", async () => {
+    for (const bad of ["https://evil.example", "https://accounts.zoho.com.evil.test", "http://accounts.zoho.com", "https://accounts.zoho.com:8443",
+      "https://user@accounts.zoho.com", "https://accounts.zoho.com/oauth", "https://accounts.zoho.com/?x=1", "https://www.zohoapis.com", "not a url"]) {
+      const net = fetchCalls, before = null;
+      const r = await call(`code=X&state=${STATE}&accounts-server=${encodeURIComponent(bad)}`, { ...owner, zoho_oauth_state: STATE });
+      assert.equal(r.status, 307, bad);
+      assert.match(decodeURIComponent(r.headers.get("location") ?? ""), /unexpected accounts-server/, bad);
+      assert.match(r.headers.get("set-cookie") ?? "", /zoho_oauth_state=;/, bad);
+      noTouch(`Z5 ${bad}`, net, before);
+    }
+  });
+  await test("Z6 Owner-supervised flow preserved (real redirect: Lax login cookie only) + valid state + official accounts host → reaches the token exchange (network stubbed); failure leaves tokens untouched", async () => {
+    process.env.ZOHO_CLIENT_ID = "synthetic-client-id"; process.env.ZOHO_CLIENT_SECRET = "synthetic-client-secret"; process.env.ZOHO_REDIRECT_URI = "http://localhost/api/zoho/callback";
+    try {
+      for (const host of ["https://accounts.zoho.com", "https://accounts.zoho.in", "https://accounts.zoho.eu/"]) {
+        const net = fetchCalls;
+        const r = await call(`code=OWNER-CODE&state=${STATE}&accounts-server=${encodeURIComponent(host)}&location=in`, { ...owner, zoho_oauth_state: STATE });
+        assert.equal(fetchCalls, net + 1, `${host}: exchange must be attempted exactly once`);
+        assert.equal(r.status, 307);
+        assert.match(r.headers.get("set-cookie") ?? "", /zoho_oauth_state=;/);
+        assert.equal(fs.existsSync(TOKEN_FILE), false, "failed exchange must not write tokens");
+      }
+    } finally { delete process.env.ZOHO_CLIENT_ID; delete process.env.ZOHO_CLIENT_SECRET; delete process.env.ZOHO_REDIRECT_URI; }
+  });
+  await test("Z7 READ-only OAuth scopes and the connect route are byte-identical to base 5ca41c9 (no new scopes)", async () => {
+    const d = execFileSync("git", ["diff", BASE, "--", "app/lib/zoho-security-guard.ts", "app/api/zoho/connect/route.ts", "app/lib/zoho-token-store.ts"], { cwd: ROOT, encoding: "utf8" });
+    assert.equal(d, "");
+    const { APPROVED_ZOHO_READ_SCOPES } = await import(lib("zoho-security-guard.ts"));
+    assert.ok(APPROVED_ZOHO_READ_SCOPES.length > 0 && APPROVED_ZOHO_READ_SCOPES.every((s: string) => /\.READ$/i.test(s)), APPROVED_ZOHO_READ_SCOPES.join(","));
+  });
+  await test("Z8 manifest: zoho/callback is Owner-only via the live route guard, no longer PUBLIC; passphrase gate NOT used (Strict cookie absent on Zoho redirect)", async () => {
+    const p = (ROUTE_POLICIES as any)["zoho/callback"].GET;
+    assert.equal(p.classification, "OWNER_ONLY");
+    assert.equal(p.enforcement, "route-guard");
+    assert.doesNotMatch(fs.readFileSync(path.join(ROOT, "app/api/zoho/callback/route.ts"), "utf8"), /requireOwnerSession/);
+  });
+  oa.destroyOwnerSession(sess.token);
+
+  const orch = await import(pathToFileURL(path.join(ROOT, "app/api/orchestrator/[[...segments]]/route.ts")).href);
+  const orchReq = (tokenHeader?: string) => new NextRequest("http://localhost/api/orchestrator/tasks",
+    { headers: { cookie: `bansil_auth=${encodeURIComponent(T_OWNER)}`, ...(tokenHeader ? { "x-orchestrator-token": tokenHeader } : {}) } });
+  const octx = { params: Promise.resolve({ segments: ["tasks"] }) };
+  const ORCH_DATA = path.join(ROOT, "tools/chatgpt-antigravity-orchestrator/data");
+  await test("OT1 orchestrator: no hard-coded fallback token remains in source", async () => {
+    const src = fs.readFileSync(path.join(ROOT, "app/api/orchestrator/[[...segments]]/route.ts"), "utf8");
+    assert.doesNotMatch(src, /ORCHESTRATOR_OWNER_TOKEN\s*\|\|/);
+    assert.doesNotMatch(src, /ORCHESTRATOR_OWNER_TOKEN\s*\?\?\s*["'][^"']+["']/);
+  });
+  await test("OT2 orchestrator fails CLOSED (503) for the Owner when the token is unset, short, or the formerly published value — vault/DB never opened", async () => {
+    const saved = process.env.ORCHESTRATOR_OWNER_TOKEN;
+    const existedBefore = fs.existsSync(ORCH_DATA);
+    try {
+      for (const v of [undefined, "", "short-token", "bansil-orchestrator-owner-20260918"]) {
+        if (v === undefined) delete process.env.ORCHESTRATOR_OWNER_TOKEN; else process.env.ORCHESTRATOR_OWNER_TOKEN = v;
+        const r = await orch.GET(orchReq("bansil-orchestrator-owner-20260918"), octx);
+        assert.equal(r.status, 503, String(v));
+        assert.match(JSON.stringify(await r.json()), /ORCHESTRATOR_OWNER_TOKEN is not configured/);
+      }
+      assert.equal(fs.existsSync(ORCH_DATA), existedBefore, "orchestrator data dir must not be created");
+    } finally { if (saved === undefined) delete process.env.ORCHESTRATOR_OWNER_TOKEN; else process.env.ORCHESTRATOR_OWNER_TOKEN = saved; }
+  });
+  await test("OT3 orchestrator: non-Owner still 403 before any token logic (guard unchanged)", async () => {
+    const r = await orch.GET(new NextRequest("http://localhost/api/orchestrator/tasks", { headers: { cookie: `bansil_auth=${encodeURIComponent(T_EMP)}` } }), octx);
+    assert.equal(r.status, 403);
+  });
+}
+
 // ------------------------------------------------------------------ summary
 console.log(`\n${"─".repeat(56)}\nTotal: ${passed + failed} | Passed: ${passed} | Failed: ${failed}`);
-console.log(`network attempts during run: ${fetchCalls}`);
+console.log(`network attempts during run: ${fetchCalls} (3 expected: Z6's stubbed Owner token exchanges; every other test asserts 0)`);
 fs.rmSync(TMP, { recursive: true, force: true });
 if (failed) {
   console.log(`FAILED: ${failures.join("; ")}`);

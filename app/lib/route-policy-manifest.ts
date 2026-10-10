@@ -539,7 +539,7 @@ export const ROUTE_POLICIES: Readonly<Record<string, Partial<Record<HttpMethod, 
   },
   "orchestrator/[[...segments]]": {
     GET: { classification: "OWNER_ONLY", enforcement: "route-guard", rbac2a: "HARDENED", note: "Orchestrator exposes task data and AI provider configuration status" },
-    POST: { classification: "OWNER_ONLY", enforcement: "route-guard", rbac2a: "HARDENED", note: "Orchestrator stores AI provider API keys and runs tasks", ownerDecision: "Hard-coded default ORCHESTRATOR_OWNER_TOKEN fallback in source — set the env var or remove the default" },
+    POST: { classification: "OWNER_ONLY", enforcement: "route-guard", rbac2a: "HARDENED", note: "Orchestrator stores AI provider API keys and runs tasks" },
   },
   "price-reference": {
     GET: { classification: "MODULE_RESTRICTED", enforcement: "route-guard", rbac2a: "HARDENED", module: "reports", action: "view", note: "[P0] Price Reference (Sidebar: Reports)" },
@@ -582,7 +582,7 @@ export const ROUTE_POLICIES: Readonly<Record<string, Partial<Record<HttpMethod, 
     GET: { classification: "OWNER_ONLY", enforcement: "route-guard", rbac2a: "HARDENED", note: "Calls Zoho live (API quota / token refresh) — external connection usage", ownerDecision: "Which roles may trigger live Zoho reads" },
   },
   "zoho/callback": {
-    GET: { classification: "PUBLIC", enforcement: "public", rbac2a: "PRE_EXISTING", note: "Listed in middleware PUBLIC_PATHS" },
+    GET: { classification: "OWNER_ONLY", enforcement: "route-guard", rbac2a: "HARDENED", note: "[P0] Completing OAuth replaces the stored Zoho connection: live Owner JWT (SameSite=Lax, survives Zoho's redirect) + single-use state cookie issued only by the passphrase-gated /api/zoho/connect. P0-SECURITY-FINAL (was PUBLIC)" },
   },
   "zoho/connect": {
     GET: { classification: "OWNER_ONLY", enforcement: "owner-session+jwt-role", rbac2a: "PRE_EXISTING", note: "C-1 three-layer guard: JWT + super_admin role + Owner passphrase session" },
