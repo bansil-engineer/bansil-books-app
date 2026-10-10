@@ -165,10 +165,17 @@ export function UserManagementView() {
       setNewRole("viewer"); setModulePerms({});
       fetchUsers();
 
-      if (data.updatedAuthUsers) {
-        setSuccess(`User "${newName}" added!\n\nUpdate AUTH_USERS in Vercel:\n${data.updatedAuthUsers}`);
+      if (data.AUTH_USERS) {
+        setSuccess(
+          `Configuration generated for "${newName}".\n\n` +
+          `To activate this user:\n` +
+          `1. Open the Render dashboard → your service → Environment.\n` +
+          `2. Update the AUTH_USERS variable with the new value (retrieve it from the Network tab of your browser DevTools — POST /api/auth/users response body → AUTH_USERS field).\n` +
+          `3. Save and wait for Render to redeploy.\n\n` +
+          `The user cannot log in until redeployment completes.`
+        );
       } else {
-        setSuccess(`User "${newName}" added.`);
+        setSuccess(`Configuration generated for "${newName}". Update AUTH_USERS in the Render dashboard and redeploy to activate.`);
       }
     } catch { setError("Network error"); }
     finally { setAdding(false); }
@@ -188,8 +195,17 @@ export function UserManagementView() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || "Failed to remove user"); setDeleting(null); return; }
 
-      if (data.updatedAuthUsers) {
-        setSuccess(`User removed!\n\nUpdate AUTH_USERS in Vercel:\n${data.updatedAuthUsers}`);
+      if (data.AUTH_USERS) {
+        setSuccess(
+          `Configuration updated — "${email}" removed.\n\n` +
+          `To deactivate this user:\n` +
+          `1. Open the Render dashboard → your service → Environment.\n` +
+          `2. Update the AUTH_USERS variable with the new value (retrieve from Network tab → DELETE /api/auth/users response body → AUTH_USERS field).\n` +
+          `3. Save and wait for Render to redeploy.\n\n` +
+          `The user can still log in until redeployment completes.`
+        );
+      } else {
+        setSuccess(`Configuration updated. Update AUTH_USERS in the Render dashboard and redeploy to deactivate "${email}".`);
       }
       fetchUsers();
     } catch { setError("Network error"); }
@@ -387,8 +403,11 @@ export function UserManagementView() {
 
       <div style={{ marginTop: 16, padding: 12, borderRadius: 6, background: "var(--bg-subtle)",
         border: "1px solid var(--border)", fontSize: 11, color: "var(--text-secondary)", lineHeight: 1.6 }}>
-        <strong>Note:</strong> After adding or removing a user, copy the updated AUTH_USERS JSON
-        and paste it into Vercel Environment Variables, then redeploy.
+        <strong>How user activation works:</strong> Adding or removing a user generates a new configuration.
+        To apply it, retrieve the updated <code>AUTH_USERS</code> value from the Network tab
+        (POST or DELETE → <code>/api/auth/users</code> → response body → <code>AUTH_USERS</code> field),
+        paste it into the <strong>Render dashboard</strong> under Environment Variables, and redeploy.
+        Users are not active (or inactive) until redeployment completes.
       </div>
     </div>
   );
