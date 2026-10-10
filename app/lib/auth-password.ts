@@ -122,14 +122,24 @@ export function dummyVerify(password: string): void {
 }
 
 // ------------------------------------------------------------------
-// ASYNC, BOUNDED KDF — used by every request path.
+// ASYNC, BOUNDED, PRIORITISED KDF — used by every request path.
 //
-// scryptSync at these parameters blocks the event loop ~370 ms, so a
-// handful of anonymous login requests per second would stall the whole
-// app. The async variant runs on the libuv threadpool. A single-slot
-// semaphore caps memory at ONE 64 MiB derivation at a time (512 MB
-// instance), and a bounded queue turns floods into fast 429s instead of
-// unbounded latency/memory.
+// scryptSync at these parameters blocks the event loop ~370 ms, so the
+// async variant runs on the libuv threadpool. A single slot caps memory at
+// ONE 64 MiB derivation at a time (512 MB instance).
+//
+// Two lanes (OA-U2-F / QC F3):
+//   "trusted"   — requests already tied to a known party: a login carrying a
+//                 valid device cookie for that account, an authenticated
+//                 change-password, or an invitation accept whose token was
+//                 already validated. Always served before the general lane.
+//   "untrusted" — everything else (anonymous logins).
+// Each lane has its own bounded queue, so an anonymous flood can only fill
+// the untrusted lane; it can never starve trusted requests (Owner access).
+//
+// The slot is handed DIRECTLY to the next waiter (QC F6): the active count
+// never drops to zero between holders, so a newcomer cannot slip in and run
+// a second 64 MiB derivation concurrently.
 // ------------------------------------------------------------------
 
 export class KdfBusyError extends Error {
@@ -139,28 +149,49 @@ export class KdfBusyError extends Error {
   }
 }
 
+export type KdfLane = "trusted" | "untrusted";
 export const KDF_MAX_CONCURRENT = 1;
-export const KDF_MAX_QUEUE = 8;
+export const KDF_MAX_QUEUE = 8; // per lane
 let kdfActive = 0;
-const kdfQueue: Array<() => void> = [];
+let kdfPeakActive = 0;
+const kdfQueues: Record<KdfLane, Array<() => void>> = { trusted: [], untrusted: [] };
 
-async function withKdfSlot<T>(fn: () => Promise<T>): Promise<T> {
-  if (kdfActive >= KDF_MAX_CONCURRENT) {
-    if (kdfQueue.length >= KDF_MAX_QUEUE) throw new KdfBusyError();
-    await new Promise<void>((resolve) => kdfQueue.push(resolve));
-  }
-  kdfActive++;
-  try {
-    return await fn();
-  } finally {
+/** Test/diagnostic: highest number of derivations ever running at once. */
+export function kdfStats(): { active: number; peakActive: number; queued: Record<KdfLane, number> } {
+  return {
+    active: kdfActive,
+    peakActive: kdfPeakActive,
+    queued: { trusted: kdfQueues.trusted.length, untrusted: kdfQueues.untrusted.length },
+  };
+}
+
+function releaseSlot(): void {
+  const next = kdfQueues.trusted.shift() ?? kdfQueues.untrusted.shift();
+  if (next) {
+    next(); // ownership transfers; kdfActive stays unchanged
+  } else {
     kdfActive--;
-    const next = kdfQueue.shift();
-    if (next) next();
   }
 }
 
-function deriveAsync(password: string, salt: string, params: ScryptParams): Promise<Buffer> {
+async function withKdfSlot<T>(lane: KdfLane, fn: () => Promise<T>): Promise<T> {
+  if (kdfActive >= KDF_MAX_CONCURRENT) {
+    if (kdfQueues[lane].length >= KDF_MAX_QUEUE) throw new KdfBusyError();
+    await new Promise<void>((resolve) => kdfQueues[lane].push(resolve));
+  } else {
+    kdfActive++;
+  }
+  kdfPeakActive = Math.max(kdfPeakActive, kdfActive);
+  try {
+    return await fn();
+  } finally {
+    releaseSlot();
+  }
+}
+
+function deriveAsync(password: string, salt: string, params: ScryptParams, lane: KdfLane): Promise<Buffer> {
   return withKdfSlot(
+    lane,
     () =>
       new Promise<Buffer>((resolve, reject) =>
         scrypt(password, salt, KEY_LEN, { N: params.N, r: params.r, p: params.p, maxmem: maxmemFor(params) },
@@ -169,9 +200,11 @@ function deriveAsync(password: string, salt: string, params: ScryptParams): Prom
   );
 }
 
-export async function hashPasswordAsync(password: string): Promise<string> {
+const DUMMY_SALT = "00000000000000000000000000000000";
+
+export async function hashPasswordAsync(password: string, lane: KdfLane = "untrusted"): Promise<string> {
   const salt = randomBytes(16).toString("hex");
-  const key = await deriveAsync(password, salt, CURRENT_PARAMS);
+  const key = await deriveAsync(password, salt, CURRENT_PARAMS, lane);
   return encode(CURRENT_PARAMS, salt, key.toString("hex"));
 }
 
@@ -180,22 +213,26 @@ export async function hashPasswordAsync(password: string): Promise<string> {
  * hash is padded to the current cost, so response time does not reveal
  * which accounts were migrated from AUTH_USERS.
  */
-export async function verifyPasswordAsync(password: string, stored: string | null | undefined): Promise<boolean> {
+export async function verifyPasswordAsync(
+  password: string,
+  stored: string | null | undefined,
+  lane: KdfLane = "untrusted",
+): Promise<boolean> {
   const d = stored ? decode(stored) : null;
   if (!d) {
-    await deriveAsync(password, "00000000000000000000000000000000", CURRENT_PARAMS);
+    await deriveAsync(password, DUMMY_SALT, CURRENT_PARAMS, lane);
     return false;
   }
-  const computed = await deriveAsync(password, d.salt, d.params);
+  const computed = await deriveAsync(password, d.salt, d.params, lane);
   const ok = computed.length === d.hash.length && timingSafeEqual(computed, d.hash);
   if (!ok && needsRehash(stored!)) {
-    await deriveAsync(password, "00000000000000000000000000000000", CURRENT_PARAMS);
+    await deriveAsync(password, DUMMY_SALT, CURRENT_PARAMS, lane);
   }
   return ok;
 }
 
-export async function dummyVerifyAsync(password: string): Promise<void> {
-  await deriveAsync(password, "00000000000000000000000000000000", CURRENT_PARAMS);
+export async function dummyVerifyAsync(password: string, lane: KdfLane = "untrusted"): Promise<void> {
+  await deriveAsync(password, DUMMY_SALT, CURRENT_PARAMS, lane);
 }
 
 export type PasswordPolicyResult = { ok: true } | { ok: false; error: string };

@@ -5,7 +5,8 @@
 // never appears in access logs). It is read once, removed from the address
 // bar, and POSTed in the request body to /api/auth/invitations/accept.
 
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useRef, useState, FormEvent } from "react";
+import { readTokenOnce } from "@/app/lib/invite-token";
 
 const MIN_LEN = 12;
 
@@ -16,12 +17,19 @@ export default function InvitePage() {
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  // QC F4: React Strict Mode (next dev) runs effects twice. The ref survives
+  // the simulated remount, so the fragment is read exactly once and the
+  // second run cannot overwrite the token with "" after the hash is stripped.
+  const readOnce = useRef(false);
 
   useEffect(() => {
-    const m = /(?:^|&)token=([A-Za-z0-9_-]{20,200})/.exec(window.location.hash.replace(/^#/, ""));
-    setToken(m ? m[1] : "");
-    // Strip the token from the address bar / history.
-    window.history.replaceState(null, "", window.location.pathname);
+    readTokenOnce(
+      readOnce,
+      () => window.location.hash,
+      setToken,
+      // Strip the token from the address bar / history.
+      () => window.history.replaceState(null, "", window.location.pathname),
+    );
   }, []);
 
   async function handleSubmit(e: FormEvent) {

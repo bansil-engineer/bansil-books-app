@@ -11,8 +11,9 @@ import { isDbStore, runDbHandler } from "../../../lib/auth-guard.ts";
 import { dbChangePassword } from "../../../lib/auth-service.ts";
 
 export async function POST(request: NextRequest) {
-  // OA-U2: DB store persists immediately and revokes other sessions;
-  // no AUTH_USERS JSON is ever returned.
+  // OA-U2: DB store persists immediately and ends other sessions at their next
+  // server-side session check (auth/account routes in Phase 1); no AUTH_USERS
+  // JSON is ever returned.
   if (isDbStore()) return runDbHandler(request, dbChangePassword);
 
   const token = request.cookies.get(AUTH_COOKIE_NAME)?.value;

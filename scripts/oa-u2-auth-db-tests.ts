@@ -38,12 +38,16 @@ const auth = await import(lib("auth.ts"));
 const { isAllowed, parsePermissions } = await import(lib("auth-permissions.ts"));
 const { CURRENT_PARAMS, verifyPasswordV1, needsRehash } = await import(lib("auth-password.ts"));
 const store = await import(lib("auth-store.ts"));
+const rl = await import(lib("auth-ratelimit.ts"));
+const pw = await import(lib("auth-password.ts"));
+const inviteTok = await import(lib("invite-token.ts"));
 
 // ------------------------------------------------------------------ harness
 let passed = 0;
 let failed = 0;
 const failures: string[] = [];
 async function test(name: string, fn: () => unknown | Promise<unknown>) {
+  rl.__resetLoginRateLimiterForTests(); // each test starts with fresh rate-limit state
   try {
     await fn();
     passed++;
@@ -699,7 +703,7 @@ await test("14a OA-U2 files contain no Zoho, fetch or outbound-network calls", a
   const files = ["app/lib/auth-password.ts", "app/lib/auth-permissions.ts", "app/lib/auth-repository.ts",
     "app/lib/auth-service.ts", "app/lib/auth-store.ts", "app/lib/auth-guard.ts", "app/lib/db/auth-database.ts",
     "scripts/auth-store-migrate.ts", "app/api/auth/invitations/route.ts", "app/api/auth/invitations/accept/route.ts",
-    "app/api/auth/audit-log/route.ts"];
+    "app/api/auth/audit-log/route.ts", "app/lib/auth-ratelimit.ts", "app/lib/invite-token.ts"];
   for (const f of files) {
     const src = fs.readFileSync(path.join(ROOT, f), "utf8");
     assert.ok(!/zoho/i.test(src.replace(/\/\/.*$/gm, "")), `${f} references zoho`);
@@ -815,6 +819,308 @@ await test("15i failed check against a legacy hash is padded to current cost (no
   await repo.authenticate("missing@synthetic.test", "wrong-password-xyz", "timing-0002"); // dummy path
   const unknown = Date.now() - t1;
   assert.ok(legacyFail >= unknown * 0.8, `legacy fail ${legacyFail}ms vs unknown ${unknown}ms`);
+});
+
+// ==================================================================
+section("16. OA-U2-F — account recovery (QC F2)");
+async function ownerFixture() {
+  const f = freshRepo();
+  return { ...f, owner: await login(f.repo, OWNER_EMAIL, OWNER_PW) };
+}
+const auditOf = (repo: any, email: string) =>
+  repo.listAudit(1000).filter((a: any) => a.target_email === email).reverse();
+
+await test("16a invited → deactivated → reactivated returns to 'invited' (not active, no sign-in)", async () => {
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "rec@synthetic.test", name: "Rec", role: "viewer", modules: ["dashboard:view"] } }));
+  assert.equal(svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "rec@synthetic.test" } })).status, 200);
+  const r = svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "rec@synthetic.test" } }));
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.user.status, "invited");
+  assert.equal(r.body.user.pendingInvitation, null, "no live link after reactivation");
+  const l = await svc.dbLogin(repo, ctx({ body: { email: "rec@synthetic.test", password: "Anything-Synthetic-1" } }));
+  assert.equal(l.status, 401);
+});
+await test("16b full recovery lifecycle: old link dead, new link single-use + works, login OK", async () => {
+  const { repo, owner } = await ownerFixture();
+  const c = await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "life@synthetic.test", name: "Life", role: "viewer", modules: ["dashboard:view"] } }));
+  const oldTok = tokenFromPath(c.body.invitation.path);
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "life@synthetic.test" } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "life@synthetic.test" } }));
+  assert.equal((await svc.dbInvitationAccept(repo, ctx({ body: { token: oldTok, password: "Life-Synthetic-Pass-1" } }))).status, 400,
+    "link issued before deactivation must never work again");
+  const n = svc.dbInvitationsPost(repo, ctx({ token: owner, body: { email: "life@synthetic.test", purpose: "invite" } }));
+  assert.equal(n.status, 201, JSON.stringify(n.body));
+  const newTok = tokenFromPath(n.body.invitation.path);
+  assert.equal((await svc.dbInvitationAccept(repo, ctx({ body: { token: newTok, password: "Life-Synthetic-Pass-1" } }))).status, 200);
+  assert.equal((await svc.dbInvitationAccept(repo, ctx({ body: { token: newTok, password: "Life-Synthetic-Pass-2" } }))).status, 400, "replay rejected");
+  await login(repo, "life@synthetic.test", "Life-Synthetic-Pass-1");
+  assert.equal(repo.getUser("life@synthetic.test").status, "active");
+});
+await test("16c new recovery link expires (72h) and a second issue invalidates the first", async () => {
+  let now = new Date("2026-03-01T00:00:00Z");
+  const f = freshRepo(() => now);
+  const owner = await login(f.repo, OWNER_EMAIL, OWNER_PW);
+  await svc.dbUsersPost(f.repo, ctx({ token: owner, body: { email: "exp@synthetic.test", name: "Exp", role: "viewer", modules: ["dashboard:view"] } }));
+  svc.dbUsersPatch(f.repo, ctx({ token: owner, body: { action: "deactivate", email: "exp@synthetic.test" } }));
+  svc.dbUsersPatch(f.repo, ctx({ token: owner, body: { action: "activate", email: "exp@synthetic.test" } }));
+  const a = tokenFromPath(svc.dbInvitationsPost(f.repo, ctx({ token: owner, body: { email: "exp@synthetic.test", purpose: "invite" } })).body.invitation.path);
+  const b = tokenFromPath(svc.dbInvitationsPost(f.repo, ctx({ token: owner, body: { email: "exp@synthetic.test", purpose: "invite" } })).body.invitation.path);
+  assert.equal((await svc.dbInvitationAccept(f.repo, ctx({ body: { token: a, password: "Exp-Synthetic-Pass-1" } }))).status, 400);
+  now = new Date("2026-03-04T00:00:01Z");
+  assert.equal((await svc.dbInvitationAccept(f.repo, ctx({ body: { token: b, password: "Exp-Synthetic-Pass-1" } }))).status, 400, "expired");
+});
+await test("16d deactivated user: invite/reset refused with clear message and audited as denied", async () => {
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "deny@synthetic.test", name: "D", role: "viewer", modules: ["dashboard:view"] } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "deny@synthetic.test" } }));
+  for (const purpose of ["invite", "reset"]) {
+    const r = svc.dbInvitationsPost(repo, ctx({ token: owner, body: { email: "deny@synthetic.test", purpose } }));
+    assert.equal(r.status, 409);
+    assert.match(r.body.error, /reactivate the user first/);
+  }
+  assert.ok(auditOf(repo, "deny@synthetic.test").some((a: any) => a.result === "denied" && a.detail === "account deactivated"));
+});
+await test("16e duplicate creation still blocked during/after recovery; no second account", async () => {
+  const { repo, owner, db } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "dup@synthetic.test", name: "Dup", role: "viewer", modules: ["dashboard:view"] } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "dup@synthetic.test" } }));
+  assert.equal((await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "DUP@synthetic.test", name: "Dup2", role: "admin", modules: ["*"] } }))).status, 409);
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "dup@synthetic.test" } }));
+  assert.equal((await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "dup@synthetic.test", name: "Dup3", role: "admin", modules: ["*"] } }))).status, 409);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM auth_users WHERE email_normalized='dup@synthetic.test'").get().n, 1);
+  assert.equal(repo.getUser("dup@synthetic.test").role, "viewer", "recovery never changes role (no escalation)");
+});
+await test("16f previously active user: deactivate → reactivate restores 'active' with same password", async () => {
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "act@synthetic.test", name: "A", role: "viewer", modules: ["dashboard:view"], password: "Act-Synthetic-Pass-01" } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "act@synthetic.test" } }));
+  const r = svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "act@synthetic.test" } }));
+  assert.equal(r.body.user.status, "active");
+  await login(repo, "act@synthetic.test", "Act-Synthetic-Pass-01");
+});
+await test("16g a reset link issued before deactivation cannot be used after reactivation (no takeover)", async () => {
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "tko@synthetic.test", name: "T", role: "viewer", modules: ["dashboard:view"], password: "Tko-Synthetic-Pass-01" } }));
+  const rs = svc.dbInvitationsPost(repo, ctx({ token: owner, body: { email: "tko@synthetic.test", purpose: "reset" } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "tko@synthetic.test" } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "tko@synthetic.test" } }));
+  assert.equal((await svc.dbInvitationAccept(repo, ctx({ body: { token: tokenFromPath(rs.body.invitation.path), password: "Attacker-Chosen-Pass-1" } }))).status, 400);
+  await login(repo, "tko@synthetic.test", "Tko-Synthetic-Pass-01");
+});
+await test("16h recovery audit trail: status transitions recorded with from→to detail", async () => {
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "aud@synthetic.test", name: "Aud", role: "viewer", modules: ["dashboard:view"] } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "aud@synthetic.test" } }));
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "aud@synthetic.test" } }));
+  svc.dbInvitationsPost(repo, ctx({ token: owner, body: { email: "aud@synthetic.test", purpose: "invite" } }));
+  const seq = auditOf(repo, "aud@synthetic.test").filter((a: any) => a.result === "success").map((a: any) => `${a.action}${a.detail?.includes("->") ? ` (${a.detail})` : ""}`);
+  assert.deepEqual(seq, ["user.create", "user.deactivate (invited -> deactivated)", "user.activate (deactivated -> invited)", "invitation.issue"]);
+  for (const a of auditOf(repo, "aud@synthetic.test")) assert.equal(a.actor_email, OWNER_EMAIL);
+});
+await test("16i Owner protection unchanged (cannot deactivate/reactivate/reset Owner)", async () => {
+  const { repo, owner } = await ownerFixture();
+  for (const action of ["deactivate", "activate"]) {
+    assert.equal(svc.dbUsersPatch(repo, ctx({ token: owner, body: { action, email: OWNER_EMAIL } })).status, 403);
+  }
+  assert.equal(svc.dbInvitationsPost(repo, ctx({ token: owner, body: { email: OWNER_EMAIL, purpose: "reset" } })).status, 403);
+  assert.ok(repo.hasActiveOwner());
+});
+
+section("17. OA-U2-F — session messaging (QC F1)");
+await test("17a deactivate / rights-change responses carry the accurate limitation notice", async () => {
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "msg@synthetic.test", name: "M", role: "viewer", modules: ["dashboard:view"], password: "Msg-Synthetic-Pass-01" } }));
+  const d = svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "deactivate", email: "msg@synthetic.test" } }));
+  assert.match(d.body.sessionNotice, /at most 8 hours/);
+  svc.dbUsersPatch(repo, ctx({ token: owner, body: { action: "activate", email: "msg@synthetic.test" } }));
+  const u = svc.dbUsersPatch(repo, ctx({ token: owner, body: { email: "msg@synthetic.test", modules: ["dashboard:view", "reports:view"] } }));
+  assert.match(u.body.sessionNotice, /data pages do not yet re-check/);
+  const n = svc.dbUsersPatch(repo, ctx({ token: owner, body: { email: "msg@synthetic.test", name: "Renamed" } }));
+  assert.equal(n.body.sessionNotice, undefined, "name-only edit makes no session claim");
+});
+await test("17b no source file claims immediate sign-out / immediate revocation", async () => {
+  const files = ["app/components/UserManagementDbView.tsx", "app/lib/auth-service.ts", "app/lib/auth-repository.ts",
+    "app/api/auth/change-password/route.ts"];
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(ROOT, f), "utf8");
+    assert.ok(!/signed out immediately|revokes every outstanding session immediately|apply immediately|deactivated and signed out|Other sessions have been signed out/i.test(src), f);
+  }
+});
+
+section("18. OA-U2-F — login rate limiting (QC F3), adversarial");
+const SMALL = {
+  perSource: { limit: 6, windowMs: 600_000 },
+  perAccountSource: { limit: 3, windowMs: 600_000 },
+  perAccount: { limit: 5, windowMs: 600_000 },
+  perAccountDevice: { limit: 3, windowMs: 600_000 },
+  acceptPerSource: { limit: 4, windowMs: 600_000 },
+};
+const xff = (ip: string, ...spoofed: string[]) => ({ "x-forwarded-for": [...spoofed, ip].join(", ") });
+const tryLogin = (repo: any, email: string, password: string, headers: Record<string, string> = {}, cookie?: string) =>
+  svc.dbLogin(repo, { ...ctx({ body: { email, password }, headers }), cookie: (n: string) => (n === "bansil_ld" ? cookie : undefined) });
+
+await test("18a client source: rightmost trusted hop only; spoofed left entries ignored; invalid → unknown", async () => {
+  assert.equal(rl.clientSource("203.0.113.7"), "v4:203.0.113.7");
+  assert.equal(rl.clientSource("6.6.6.6, 1.2.3.4, 203.0.113.7"), "v4:203.0.113.7");
+  assert.equal(rl.clientSource("203.0.113.7, 10.0.0.1", 2), "v4:203.0.113.7");
+  assert.equal(rl.clientSource("garbage"), "unknown");
+  assert.equal(rl.clientSource(null), "unknown");
+  assert.equal(rl.clientSource("1.2.3.4", 2), "unknown");
+  assert.equal(rl.clientSource("2001:db8:1:2:aaaa::1"), rl.clientSource("2001:db8:1:2:bbbb::9"), "IPv6 grouped by /64");
+  assert.notEqual(rl.clientSource("2001:db8:1:2::1"), rl.clientSource("2001:db8:1:3::1"));
+});
+await test("18b per-source limit → 429 with Retry-After; other sources unaffected", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo } = freshRepo();
+  const rs = await Promise.all(Array.from({ length: 9 }, (_, i) => tryLogin(repo, `nobody${i}@synthetic.test`, "Wrong-Pass-123", xff("198.51.100.9"))));
+  const codes = rs.map((r: any) => r.status);
+  assert.equal(codes.filter((c: number) => c === 429).length, 3, codes.join(","));
+  const r429 = rs.find((r: any) => r.status === 429);
+  assert.match(r429.headers["Retry-After"], /^\d+$/);
+  assert.ok(Number(r429.headers["Retry-After"]) >= 1 && Number(r429.headers["Retry-After"]) <= 600);
+  assert.equal((await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("192.0.2.50"))).status, 200, "different source still works");
+});
+await test("18c spoofing X-Forwarded-For left entries does NOT bypass the per-source limit", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo } = freshRepo();
+  const rs = await Promise.all(Array.from({ length: 10 }, (_, i) =>
+    tryLogin(repo, `x${i}@synthetic.test`, "Wrong-Pass-123", xff("198.51.100.20", `10.9.${i}.${i}`, `172.16.0.${i}`))));
+  assert.equal(rs.filter((r: any) => r.status === 429).length, 4);
+});
+await test("18d concurrent burst against one account from one source: at most the limit reaches the password check", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo, db } = freshRepo();
+  const before = db.prepare("SELECT COUNT(*) n FROM auth_audit_log WHERE action='auth.login'").get().n;
+  const rs = await Promise.all(Array.from({ length: 6 }, () => tryLogin(repo, OWNER_EMAIL, "Wrong-Pass-123", xff("198.51.100.30"))));
+  const after = db.prepare("SELECT COUNT(*) n FROM auth_audit_log WHERE action='auth.login'").get().n;
+  assert.equal(rs.filter((r: any) => r.status === 401).length, 3);
+  assert.equal(rs.filter((r: any) => r.status === 429).length, 3);
+  assert.equal(after - before, 3, "only 3 password checks happened");
+});
+await test("18e per-account+source block does not affect other accounts from that source or the account elsewhere", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo, owner } = await ownerFixture();
+  await svc.dbUsersPost(repo, ctx({ token: owner, body: { email: "peer@synthetic.test", name: "P", role: "viewer", modules: ["dashboard:view"], password: "Peer-Synthetic-Pass-1" } }));
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  for (let i = 0; i < 3; i++) await tryLogin(repo, OWNER_EMAIL, "Wrong-Pass-123", xff("198.51.100.40"));
+  assert.equal((await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("198.51.100.40"))).status, 429);
+  assert.equal((await tryLogin(repo, "peer@synthetic.test", "Peer-Synthetic-Pass-1", xff("198.51.100.40"))).status, 200);
+  assert.equal((await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("192.0.2.77"))).status, 200);
+});
+await test("18f distributed attack on the Owner account: untrusted sources blocked, Owner's known device still signs in", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo } = freshRepo();
+  const ok = await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("192.0.2.10"));
+  assert.equal(ok.status, 200);
+  const device = ok.deviceCookie;
+  assert.ok(device, "device cookie issued on successful login");
+  await Promise.all(Array.from({ length: 8 }, (_, i) => tryLogin(repo, OWNER_EMAIL, "Wrong-Pass-123", xff(`203.0.113.${i + 1}`))));
+  assert.equal((await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("203.0.113.200"))).status, 429, "new untrusted source blocked");
+  assert.equal((await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("203.0.113.200"), device)).status, 200, "known device unaffected");
+});
+await test("18g device cookie: bound to its account, tamper/expiry rejected, contains no email", async () => {
+  const c = rl.issueDeviceCookie(OWNER_EMAIL)!;
+  assert.ok(!c.includes("owner") && !c.includes("@"));
+  assert.ok(rl.verifyDeviceCookie(c, OWNER_EMAIL));
+  assert.ok(rl.verifyDeviceCookie(c, " OWNER@synthetic.test "), "normalised");
+  assert.equal(rl.verifyDeviceCookie(c, "someone@synthetic.test"), null, "cookie for one account grants nothing for another");
+  const parts = c.split(".");
+  assert.equal(rl.verifyDeviceCookie([...parts.slice(0, 4), parts[4].slice(0, -2) + "AA"].join("."), OWNER_EMAIL), null);
+  assert.equal(rl.verifyDeviceCookie([parts[0], parts[1], parts[2], "1", parts[4]].join("."), OWNER_EMAIL), null);
+  assert.equal(rl.verifyDeviceCookie(c, OWNER_EMAIL, Date.now() + 31 * 86400_000), null, "expired");
+  const forged = auth.createToken({ email: OWNER_EMAIL, name: "x", role: "super_admin", modules: [] });
+  assert.equal(rl.verifyDeviceCookie(forged, OWNER_EMAIL), null, "a JWT is not a device cookie");
+});
+await test("18h no account enumeration: 401 and 429 identical for existing vs non-existent accounts", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo } = freshRepo();
+  const shape = (r: any) => JSON.stringify({ s: r.status, b: r.body, h: Object.keys(r.headers ?? {}).sort() });
+  const e1 = await tryLogin(repo, OWNER_EMAIL, "Wrong-Pass-123", xff("198.51.100.60"));
+  const n1 = await tryLogin(repo, "ghost@synthetic.test", "Wrong-Pass-123", xff("198.51.100.61"));
+  assert.equal(shape(e1), shape(n1));
+  for (let i = 0; i < 3; i++) {
+    await tryLogin(repo, OWNER_EMAIL, "Wrong-Pass-123", xff("198.51.100.62"));
+    await tryLogin(repo, "ghost@synthetic.test", "Wrong-Pass-123", xff("198.51.100.63"));
+  }
+  const e2 = await tryLogin(repo, OWNER_EMAIL, "Wrong-Pass-123", xff("198.51.100.62"));
+  const n2 = await tryLogin(repo, "ghost@synthetic.test", "Wrong-Pass-123", xff("198.51.100.63"));
+  assert.equal(e2.status, 429);
+  assert.equal(JSON.stringify(e2.body), JSON.stringify(n2.body));
+  assert.equal(e2.status, n2.status);
+});
+await test("18i multi-user fairness: anonymous KDF flood cannot starve the Owner's known device", async () => {
+  const { repo } = freshRepo();
+  const first = await tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("192.0.2.10"));
+  rl.__resetLoginRateLimiterForTests();
+  const flood = Array.from({ length: 30 }, (_, i) => tryLogin(repo, `flood${i}@synthetic.test`, "Wrong-Pass-123", xff(`198.18.${i}.1`)));
+  const ownerTry = tryLogin(repo, OWNER_EMAIL, OWNER_PW, xff("192.0.2.10"), first.deviceCookie);
+  const [o, ...rest] = await Promise.all([ownerTry, ...flood]);
+  assert.equal(o.status, 200, `owner got ${o.status}`);
+  assert.ok(rest.some((r: any) => r.status === 429), "flood saturated the untrusted lane");
+});
+await test("18j KDF never runs two 64 MiB derivations at once (QC F6)", async () => {
+  assert.ok(pw.kdfStats().peakActive <= 1, `peak ${pw.kdfStats().peakActive}`);
+  await Promise.all(Array.from({ length: 12 }, (_, i) => pw.hashPasswordAsync(`x-${i}-synthetic-pass`, i % 2 ? "trusted" : "untrusted").catch(() => null)));
+  assert.equal(pw.kdfStats().peakActive, 1);
+  assert.equal(pw.kdfStats().active, 0, "slot released after the queue drains");
+});
+await test("18k KDF saturation refunds account counters (a flood cannot burn a user's attempts)", async () => {
+  const lim = new rl.LoginRateLimiter(Date.now, SMALL);
+  const k = { account: rl.accountKey("a@synthetic.test"), source: "v4:1.1.1.1", deviceId: null };
+  for (let i = 0; i < 3; i++) { lim.recordAttempt(k); lim.refundAttempt(k); }
+  assert.equal(lim.checkLogin({ ...k, source: "v4:1.1.1.1" }), 0, "pair/account not exhausted");
+  assert.ok(lim.perSource.blockedFor("v4:1.1.1.1") === 0);
+});
+await test("18l limiter memory is bounded (10,000 keys)", async () => {
+  const lim = new rl.LoginRateLimiter();
+  for (let i = 0; i < 10_500; i++) lim.perAccount.hit(`k${i}`);
+  assert.ok(lim.perAccount.size() <= 10_000, String(lim.perAccount.size()));
+});
+await test("18m invitation accept is rate limited per source", async () => {
+  rl.__resetLoginRateLimiterForTests(undefined, SMALL);
+  const { repo } = freshRepo();
+  const rs = [];
+  for (let i = 0; i < 6; i++) {
+    rs.push(await svc.dbInvitationAccept(repo, ctx({ headers: xff("198.51.100.90"), body: { token: randomBytes(32).toString("base64url"), password: "Whatever-Synthetic-1" } })));
+  }
+  assert.deepEqual(rs.map((r: any) => r.status), [400, 400, 400, 400, 429, 429]);
+});
+await test("18n successful login is unaffected by limits under normal use; limiter keys hold no raw emails", async () => {
+  const { repo } = freshRepo();
+  for (let i = 0; i < 3; i++) await login(repo, OWNER_EMAIL, OWNER_PW);
+  assert.match(rl.accountKey(OWNER_EMAIL), /^[0-9a-f]{32}$/);
+});
+await test("18o existing env-mode login is unchanged by OA-U2-F (no limiter, same authenticate())", async () => {
+  const src = fs.readFileSync(path.join(ROOT, "app/api/auth/login/route.ts"), "utf8");
+  const envPart = src.slice(src.indexOf("if (isDbStore()) return runDbHandler(request, dbLogin);"));
+  assert.ok(!/loginLimiter|auth-ratelimit/.test(envPart), "env path must not use the DB-mode limiter");
+  process.env.AUTH_USERS = legacyAuthUsersJson();
+  try {
+    assert.ok(auth.authenticate(OWNER_EMAIL, OWNER_PW));
+  } finally {
+    if (SYNTH_AUTH_USERS_BEFORE === undefined) delete process.env.AUTH_USERS; else process.env.AUTH_USERS = SYNTH_AUTH_USERS_BEFORE;
+  }
+});
+
+section("19. OA-U2-F — minor issues (QC F4, F5)");
+await test("19a F4: invite token read once — a Strict-Mode second effect run cannot erase it", async () => {
+  const ref = { current: false };
+  let hash = "#token=" + "A".repeat(43);
+  const seen: string[] = [];
+  const effect = () => inviteTok.readTokenOnce(ref, () => hash, (t: string) => seen.push(t), () => { hash = ""; });
+  effect(); // first mount
+  effect(); // Strict Mode re-run after the hash was stripped
+  assert.deepEqual(seen, ["A".repeat(43)]);
+  assert.equal(inviteTok.tokenFromHash("#token=short"), "");
+  assert.equal(inviteTok.tokenFromHash("#a=1&token=" + "b".repeat(30)), "b".repeat(30));
+});
+await test("19b F5: if SQLite already rolled back, the ORIGINAL error surfaces (not 'no transaction')", async () => {
+  const { repo, db } = freshRepo();
+  assert.throws(() => (repo as any).tx(() => { db.exec("ROLLBACK"); throw new Error("ORIGINAL-FAILURE"); }), /ORIGINAL-FAILURE/);
+  assert.equal(db.isTransaction, false, "connection left clean");
+  assert.throws(() => (repo as any).tx(() => { throw new Error("NORMAL-FAILURE"); }), /NORMAL-FAILURE/);
+  assert.equal(db.isTransaction, false);
 });
 
 // ------------------------------------------------------------------ summary

@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, AUTH_COOKIE_NAME } from "./auth.ts";
 import { isAllowed } from "./auth-permissions.ts";
 import { getAuthRepository, getUserStoreMode } from "./auth-store.ts";
+import { DEVICE_COOKIE, DEVICE_COOKIE_MAX_AGE_S, DEVICE_COOKIE_PATH } from "./auth-ratelimit.ts";
 import { authorizeAccess, type Principal, type RequestContext, type ServiceResult } from "./auth-service.ts";
 
 export async function contextFromRequest(req: NextRequest, withBody = true): Promise<RequestContext> {
@@ -33,6 +34,17 @@ export function toNextResponse(result: ServiceResult): NextResponse {
   const res = NextResponse.json(result.body, { status: result.status });
   res.headers.set("Cache-Control", "no-store");
   res.headers.set("x-correlation-id", result.correlationId);
+  for (const [k, v] of Object.entries(result.headers ?? {})) res.headers.set(k, v);
+  if (result.deviceCookie) {
+    // Known-device cookie (OA-U2-F): only ever sent back to the login endpoint.
+    res.cookies.set(DEVICE_COOKIE, result.deviceCookie, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: DEVICE_COOKIE_PATH,
+      maxAge: DEVICE_COOKIE_MAX_AGE_S,
+    });
+  }
   if (result.cookie?.action === "set") {
     res.cookies.set(AUTH_COOKIE_NAME, result.cookie.value, {
       httpOnly: true,

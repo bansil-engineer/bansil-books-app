@@ -3,7 +3,8 @@
 // ============================================================
 // OA-U2 — User Management for the DATABASE user store.
 // Rendered by UserManagementView only when GET /api/auth/users reports
-// store === "db". Changes persist immediately — no Render redeploy.
+// store === "db". Changes persist immediately — no Render redeploy. Session
+// revocation scope is limited in Phase 1 (see SESSION_LIMITATION_NOTICE).
 //
 // Security notes:
 //  - No credential material is ever received from the API.
@@ -248,19 +249,29 @@ export function UserManagementDbView() {
     setBusy(null);
     if (!r.ok) return setError(r.data.error || "Failed to update user");
     setEditing(null);
-    const rights = (r.data.changed ?? []).some((c: string) => c !== "identity");
-    setNotice(rights ? "Saved. The user's existing sessions were signed out so the new rights apply immediately." : "Saved.");
+    // Server-provided wording (QC F1): never claim immediate sign-out.
+    setNotice(r.data.sessionNotice ? `Saved. New rights apply from the user's next sign-in. ${r.data.sessionNotice}` : "Saved.");
     load();
   };
 
   const setActive = async (u: DbUser, active: boolean) => {
-    if (!active && !confirm(`Deactivate ${u.email}? They will be signed out immediately.`)) return;
+    if (!active && !confirm(
+      `Deactivate ${u.email}?\n\nThey will not be able to sign in. Pages they already have open may keep ` +
+      `working until their current session expires (at most 8 hours).`,
+    )) return;
     reset();
     setBusy(u.email);
     const r = await api("PATCH", "/api/auth/users", { action: active ? "activate" : "deactivate", email: u.email });
     setBusy(null);
     if (!r.ok) return setError(r.data.error || "Failed to update status");
-    setNotice(active ? `${u.email} reactivated.` : `${u.email} deactivated and signed out.`);
+    if (!active) {
+      setNotice(`${u.email} deactivated. ${r.data.sessionNotice ?? ""}`.trim());
+    } else if (r.data.user?.status === "invited") {
+      // QC F2 recovery: never-activated users return to "invited".
+      setNotice(`${u.email} reactivated as an invited user. Issue a new link so they can set a password — earlier links no longer work.`);
+    } else {
+      setNotice(`${u.email} reactivated.`);
+    }
     load();
   };
 
@@ -313,7 +324,9 @@ export function UserManagementDbView() {
         <div>
           <h2 style={{ fontSize: 15, fontWeight: 700, margin: 0 }}>User Management</h2>
           <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 2 }}>
-            Database user store — changes apply immediately. Accounts are deactivated, never deleted.
+            Database user store — changes are saved immediately, without a redeploy. Accounts are deactivated,
+            never deleted. Deactivation blocks sign-in at once; already-open pages can keep working until the
+            user&apos;s session expires (at most 8 hours).
           </p>
         </div>
         <button onClick={() => { setShowAdd(!showAdd); reset(); }} style={primaryBtn(showAdd)}>

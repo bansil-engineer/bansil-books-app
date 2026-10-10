@@ -20,10 +20,29 @@ import { randomUUID } from "node:crypto";
 import { createToken, verifyToken, type JWTPayload } from "./auth.ts";
 import { isAllowed } from "./auth-permissions.ts";
 import { KdfBusyError } from "./auth-password.ts";
+import {
+  DEVICE_COOKIE,
+  accountKey,
+  clientSource,
+  issueDeviceCookie,
+  loginLimiter,
+  verifyDeviceCookie,
+  type LoginKeys,
+} from "./auth-ratelimit.ts";
 import type { ActorContext, AuthRepository, RepoError, UserRecord } from "./auth-repository.ts";
 
 /** DB-store sessions are shorter than env-store ones (24h) to bound exposure. */
 export const DB_SESSION_TTL_HOURS = 8;
+
+/**
+ * Accurate statement of Phase-1 revocation scope (QC F1). Do NOT claim
+ * immediate sign-out until every protected API enforces the live session
+ * check (RBAC Phase 2 — see OA-U2-F report).
+ */
+export const SESSION_LIMITATION_NOTICE =
+  "Sign-in and account pages are blocked for this user now. Pages and data they already have open " +
+  `may keep working until their current session expires (at most ${DB_SESSION_TTL_HOURS} hours), ` +
+  "because data pages do not yet re-check account status on every request.";
 
 export interface RequestContext {
   cookie(name: string): string | undefined;
@@ -38,6 +57,10 @@ export interface ServiceResult {
   body: Record<string, unknown>;
   cookie?: CookieOp;
   correlationId: string;
+  /** Extra response headers (e.g. Retry-After on 429). */
+  headers?: Record<string, string>;
+  /** OA-U2-F: signed known-device cookie to set (login success only). */
+  deviceCookie?: string;
 }
 
 export interface Principal {
@@ -112,8 +135,14 @@ export function csrfReject(ctx: RequestContext, cid: string, requireJson: boolea
   return null;
 }
 
-const busy = (cid: string): ServiceResult =>
-  json(429, { error: "Too many sign-in requests right now. Please retry in a few seconds." }, cid);
+/**
+ * One generic 429 for every limit and for KDF saturation, so the response
+ * never reveals which limit fired or whether the account exists.
+ */
+const busy = (cid: string, retryAfterS = 5): ServiceResult => ({
+  ...json(429, { error: "Too many sign-in attempts. Please wait and try again." }, cid),
+  headers: { "Retry-After": String(Math.max(1, Math.min(3600, Math.ceil(retryAfterS)))) },
+});
 
 const json = (status: number, body: Record<string, unknown>, cid: string, cookie?: CookieOp): ServiceResult => ({
   status,
@@ -253,22 +282,49 @@ export async function dbLogin(repo: AuthRepository, ctx: RequestContext): Promis
   if (csrf) return csrf;
   const { email, password } = body(ctx);
   if (!email || !password) return json(400, { error: "Email and password are required" }, cid);
+  if (typeof email !== "string" || email.length > 254) {
+    return json(401, { error: "Invalid email or password" }, cid);
+  }
   if (!repo.hasActiveOwner()) {
     // Fail closed — never fall back to AUTH_USERS silently.
     return json(503, { error: "User store is not initialized. Contact the Owner." }, cid);
   }
+
+  // OA-U2-F rate limiting — checked BEFORE any password hashing.
+  const limiter = loginLimiter();
+  const deviceId = verifyDeviceCookie(ctx.cookie(DEVICE_COOKIE), email);
+  const keys: LoginKeys = {
+    account: accountKey(email),
+    source: clientSource(ctx.header("x-forwarded-for")),
+    deviceId,
+  };
+  const wait = limiter.checkLogin(keys);
+  if (wait > 0) return busy(cid, wait);
+  limiter.recordAttempt(keys);
+
   let user: UserRecord | null;
   try {
-    user = await repo.authenticate(email, password, cid);
+    user = await repo.authenticate(email, password, cid, deviceId ? "trusted" : "untrusted");
   } catch (err) {
-    if (err instanceof KdfBusyError) return busy(cid);
+    // KDF saturated: the password was never checked, so refund the attempt
+    // (a legitimate user must not be penalised for someone else's flood).
+    if (err instanceof KdfBusyError) {
+      limiter.refundAttempt(keys);
+      return busy(cid);
+    }
     throw err;
   }
   if (!user) {
+    // Attempt was already counted pessimistically in recordAttempt().
     await new Promise((r) => setTimeout(r, 200 + Math.random() * 300));
     return json(401, { error: "Invalid email or password" }, cid);
   }
-  return json(200, { ok: true, user: publicSession(user) }, cid, issueSession(user));
+  limiter.recordSuccess(keys);
+  return {
+    ...json(200, { ok: true, user: publicSession(user) }, cid, issueSession(user)),
+    // Refresh/issue the known-device cookie for this account.
+    deviceCookie: issueDeviceCookie(user.email) ?? undefined,
+  };
 }
 
 export function dbLogout(repo: AuthRepository, ctx: RequestContext): ServiceResult {
@@ -314,7 +370,12 @@ export async function dbChangePassword(repo: AuthRepository, ctx: RequestContext
   }
   if (!res.ok) return fromRepoError(res, cid);
   // All other sessions are revoked (session_version bumped); re-issue this one.
-  return json(200, { ok: true, message: "Password changed. Other sessions have been signed out." }, cid,
+  return json(200, {
+    ok: true,
+    message:
+      "Password changed. Your other sessions can no longer use sign-in or account pages; " +
+      "they expire elsewhere within 8 hours.",
+  }, cid,
     issueSession(res.user));
 }
 
@@ -368,12 +429,22 @@ export function dbUsersPatch(repo: AuthRepository, ctx: RequestContext): Service
   if (b.action === "activate" || b.action === "deactivate") {
     const res = repo.setActive(actor, b.email, b.action === "activate");
     if (!res.ok) return fromRepoError(res, cid);
-    return json(200, { ok: true, user: res.user }, cid);
+    return json(200, {
+      ok: true,
+      user: res.user,
+      ...(b.action === "deactivate" ? { sessionNotice: SESSION_LIMITATION_NOTICE } : {}),
+    }, cid);
   }
   if (b.action !== undefined && b.action !== "update") return json(400, { error: "Unknown action" }, cid);
   const res = repo.updateUser(actor, { email: b.email, name: b.name, role: b.role, modules: b.modules });
   if (!res.ok) return fromRepoError(res, cid);
-  return json(200, { ok: true, user: res.user, changed: res.changed }, cid);
+  const rights = res.changed.some((c) => c !== "identity");
+  return json(200, {
+    ok: true,
+    user: res.user,
+    changed: res.changed,
+    ...(rights ? { sessionNotice: SESSION_LIMITATION_NOTICE } : {}),
+  }, cid);
 }
 
 export function dbUsersDelete(repo: AuthRepository, ctx: RequestContext): ServiceResult {
@@ -420,6 +491,13 @@ export async function dbInvitationAccept(repo: AuthRepository, ctx: RequestConte
   const csrf = csrfReject(ctx, cid, true);
   if (csrf) return csrf;
   const { token, password } = body(ctx);
+  // OA-U2-F: per-source cap on link attempts (garbage tokens are rejected
+  // before hashing; this bounds probing and KDF use by valid-link holders).
+  const source = clientSource(ctx.header("x-forwarded-for"));
+  const limiter = loginLimiter();
+  const wait = limiter.acceptPerSource.blockedFor(source);
+  if (wait > 0) return busy(cid, wait);
+  limiter.acceptPerSource.hit(source);
   let res;
   try {
     res = await repo.acceptInvitation(token, password, cid);

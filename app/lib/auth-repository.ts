@@ -21,6 +21,7 @@ import {
   checkPasswordPolicy,
   dummyVerifyAsync,
   hashPasswordAsync,
+  type KdfLane,
   needsRehash,
   verifyPasswordAsync,
   wrapLegacyHash,
@@ -132,7 +133,14 @@ export class AuthRepository {
       this.db.exec("COMMIT");
       return out;
     } catch (err) {
-      this.db.exec("ROLLBACK");
+      // QC F5: SQLite may already have rolled back on its own (e.g. disk
+      // full / I/O error). Only roll back if a transaction is still open,
+      // and never let a rollback failure mask the original error.
+      try {
+        if (this.db.isTransaction) this.db.exec("ROLLBACK");
+      } catch {
+        /* original error below is the one that matters */
+      }
       throw err;
     }
   }
@@ -307,13 +315,18 @@ export class AuthRepository {
    * Verify credentials. Only ACTIVE users with a password can log in.
    * Upgrades legacy hash parameters transparently on success.
    */
-  async authenticate(email: unknown, password: unknown, correlationId: string): Promise<UserRecord | null> {
+  async authenticate(
+    email: unknown,
+    password: unknown,
+    correlationId: string,
+    lane: KdfLane = "untrusted",
+  ): Promise<UserRecord | null> {
     if (typeof email !== "string" || typeof password !== "string" || password.length > 1024) {
       return null;
     }
     const r = this.row(email);
     if (!r || r.status !== "active" || !r.password_hash) {
-      await dummyVerifyAsync(password);
+      await dummyVerifyAsync(password, lane);
       this.audit({
         actor: null,
         correlationId,
@@ -324,7 +337,7 @@ export class AuthRepository {
       });
       return null;
     }
-    if (!(await verifyPasswordAsync(password, r.password_hash))) {
+    if (!(await verifyPasswordAsync(password, r.password_hash, lane))) {
       this.audit({
         actor: null,
         correlationId,
@@ -335,7 +348,7 @@ export class AuthRepository {
       });
       return null;
     }
-    const upgrade = needsRehash(r.password_hash) ? await hashPasswordAsync(password) : null;
+    const upgrade = needsRehash(r.password_hash) ? await hashPasswordAsync(password, lane) : null;
     let committed = false;
     this.tx(() => {
       // Conditional on the state we verified against: if the account was
@@ -400,7 +413,7 @@ export class AuthRepository {
     if (input.password !== undefined && input.password !== null && input.password !== "") {
       const policy = checkPasswordPolicy(input.password, email);
       if (!policy.ok) return fail("invalid", policy.error);
-      passwordHash = await hashPasswordAsync(input.password as string);
+      passwordHash = await hashPasswordAsync(input.password as string, "trusted") /* Owner-authenticated */;
     }
 
     if (this.row(email)) {
@@ -538,30 +551,57 @@ export class AuthRepository {
       this.audit({ actor, targetEmail: r.email, action, result: "denied", detail: "self" });
       return fail("forbidden", "You cannot change your own account status");
     }
+    // QC F2: a user who never set a password returns to "invited" (not
+    // "active") when reactivated. They cannot sign in until the Owner issues
+    // a NEW invitation and they accept it; every earlier link was already
+    // revoked at deactivation. Previously this path dead-ended the email.
+    let newStatus: UserStatus;
     if (active) {
-      if (r.status === "active") return { ok: true, user: this.toPublic(r) };
-      if (!r.password_hash) {
-        return fail("conflict", "User has not set a password yet; issue an invitation instead");
-      }
-    } else if (r.status === "deactivated") {
-      return { ok: true, user: this.toPublic(r) };
+      if (r.status === "active" || r.status === "invited") return { ok: true, user: this.toPublic(r) };
+      newStatus = r.password_hash ? "active" : "invited";
+    } else {
+      if (r.status === "deactivated") return { ok: true, user: this.toPublic(r) };
+      newStatus = "deactivated";
     }
 
-    this.tx(() => {
-      this.db
-        .prepare("UPDATE auth_users SET status = ?, updated_at = ? WHERE id = ?")
-        .run(active ? "active" : "deactivated", this.iso(), r.id);
-      if (!active) {
-        this.db
-          .prepare(
-            "UPDATE auth_invitations SET revoked_at = ? WHERE user_id = ? AND used_at IS NULL AND revoked_at IS NULL",
-          )
-          .run(this.iso(), r.id);
+    try {
+      this.setActiveTx(actor, r, newStatus, action);
+    } catch (err) {
+      if (err instanceof Error && err.message === "account state changed during the request") {
+        return fail("conflict", "Account changed during the request; reload and try again");
       }
-      this.bumpSession(r.id); // revokes every outstanding session immediately
-      this.audit({ actor, targetEmail: r.email, action, categories: ["status"], result: "success" });
-    });
+      throw err;
+    }
     return { ok: true, user: this.getUser(r.email)! };
+  }
+
+  private setActiveTx(actor: ActorContext, r: UserRow, newStatus: UserStatus, action: string): void {
+    this.tx(() => {
+      // Conditional on the state read above (no lost update).
+      const res = this.db
+        .prepare("UPDATE auth_users SET status = ?, updated_at = ? WHERE id = ? AND status = ?")
+        .run(newStatus, this.iso(), r.id, r.status);
+      if (Number(res.changes) !== 1) throw new Error("account state changed during the request");
+      // Any outstanding link is revoked on BOTH deactivate and reactivate, so
+      // a link issued before deactivation can never be used afterwards.
+      this.db
+        .prepare(
+          "UPDATE auth_invitations SET revoked_at = ? WHERE user_id = ? AND used_at IS NULL AND revoked_at IS NULL",
+        )
+        .run(this.iso(), r.id);
+      // Ends every session at the next server-side session check. NOTE: in
+      // Phase 1 only /api/auth/* routes perform that check; data routes rely
+      // on JWT expiry (≤ 8 h) until RBAC Phase 2 (see OA-U2-F report).
+      this.bumpSession(r.id);
+      this.audit({
+        actor,
+        targetEmail: r.email,
+        action,
+        categories: ["status"],
+        result: "success",
+        detail: `${r.status} -> ${newStatus}`,
+      });
+    });
   }
 
   issueInvitation(
@@ -576,6 +616,10 @@ export class AuthRepository {
     if (r.is_owner === 1) {
       this.audit({ actor, targetEmail: r.email, action: `invitation.${purpose}`, result: "denied", detail: "owner is protected" });
       return fail("forbidden", "Owner credentials cannot be reset through user management");
+    }
+    if (r.status === "deactivated") {
+      this.audit({ actor, targetEmail: r.email, action: `invitation.${purpose}`, result: "denied", detail: "account deactivated" });
+      return fail("conflict", "User is deactivated; reactivate the user first");
     }
     if (purpose === "invite" && r.status !== "invited") {
       return fail("conflict", "User has already accepted an invitation; use a password reset instead");
@@ -656,7 +700,7 @@ export class AuthRepository {
 
     const policy = checkPasswordPolicy(password, inv.email);
     if (!policy.ok) return fail("invalid", policy.error);
-    const hash = await hashPasswordAsync(password as string);
+    const hash = await hashPasswordAsync(password as string, "trusted") /* token already validated */;
 
     try {
       this.acceptTx(inv, hash, correlationId);
@@ -711,7 +755,7 @@ export class AuthRepository {
     const r = this.row(actor.email);
     if (!r || r.status !== "active" || !r.password_hash) return fail("forbidden", "Account is not active");
     if (typeof currentPassword !== "string" || currentPassword.length > 1024 ||
-        !(await verifyPasswordAsync(currentPassword, r.password_hash))) {
+        !(await verifyPasswordAsync(currentPassword, r.password_hash, "trusted"))) {
       this.audit({ actor, targetEmail: r.email, action: "password.change", result: "denied", detail: "bad current password" });
       return fail("forbidden", "Current password is incorrect");
     }
@@ -720,7 +764,7 @@ export class AuthRepository {
     if (newPassword === currentPassword) {
       return fail("invalid", "New password must differ from the current password");
     }
-    const hash = await hashPasswordAsync(newPassword as string);
+    const hash = await hashPasswordAsync(newPassword as string, "trusted");
     let committed = false;
     this.tx(() => {
       // Conditional: nobody else changed the password / status meanwhile.
