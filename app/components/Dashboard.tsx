@@ -7,6 +7,7 @@ import type {
 } from "@/app/types/reconciliation";
 import { formatINR, formatQuantity, formatDisplayDate } from "@/app/lib/date-utils";
 import { SelectiveSyncModal } from "./SelectiveSyncModal";
+import { useAuth } from "./AuthProvider";
 
 interface DashboardProps {
   mismatchReport: MasterInventoryMismatchReportResult | null;
@@ -33,6 +34,8 @@ export function Dashboard({
   coverageStatus,
   loading = false,
 }: DashboardProps) {
+  // Sync is Owner-only (server-enforced); hide the controls for employees.
+  const { isOwner } = useAuth();
   const [selectedPeriod, setSelectedPeriod] = useState<string>(financialYear);
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [customFrom, setCustomFrom] = useState<string>("2026-04-01");
@@ -278,6 +281,7 @@ export function Dashboard({
             <span>⚠️</span>
             <span><strong>Data may be outdated:</strong> {staleMessage || "Local cache has not been synced recently."}</span>
           </div>
+          {isOwner && (
           <button
             className="btn btn-sm"
             onClick={() => handleSmartSyncAll("SMART")}
@@ -286,6 +290,7 @@ export function Dashboard({
           >
             {isSyncingAll ? "Syncing..." : "⚡ Smart Sync Now"}
           </button>
+          )}
         </div>
       )}
 
@@ -332,6 +337,7 @@ export function Dashboard({
           </span>
         </div>
 
+        {isOwner && (
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <button
             className="btn btn-sm"
@@ -351,6 +357,7 @@ export function Dashboard({
             ⚙️ Selective Sync...
           </button>
         </div>
+        )}
       </div>
 
       {/* Sync All Result Notice */}

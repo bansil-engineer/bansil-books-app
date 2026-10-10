@@ -3,8 +3,13 @@ import { getGenuineCashAccounts, syncCashAccounts } from "../../../lib/audit/cas
 import { calculateCashEquation } from "../../../lib/audit/cash-equation";
 import { resolveDateRange } from "../../../lib/date-period-utils";
 import { getAuditDatabase } from "../../../lib/db/audit-database";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/cash", "GET"), "audit/cash GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const { searchParams } = new URL(request.url);
   const fy = searchParams.get("fy") || "2025-26";
   
@@ -89,6 +94,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/cash", "POST"), "audit/cash POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const fy = body.fy || "2025-26";

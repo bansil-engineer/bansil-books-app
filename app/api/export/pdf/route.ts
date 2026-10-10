@@ -36,6 +36,8 @@ import { generateExportFilename } from "@/app/lib/export/export-utils";
 import { getActivityDateRange } from "@/app/lib/date-period-utils";
 import { buildZohoActivityPdf } from "@/app/lib/export/zoho-activity-export-builder";
 import type { ReconciliationFilter, ExportOptions, ExportFieldKey, ItemClassification, ExportReportType } from "@/app/types/reconciliation";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +61,9 @@ function parseFilter(searchParams: URLSearchParams): ReconciliationFilter {
 }
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("export/pdf", "GET"), "export/pdf GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_export");
   if (disabled) return disabled;
   try {
@@ -360,6 +365,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("export/pdf", "POST"), "export/pdf POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_export");
   if (disabled) return disabled;
   try {

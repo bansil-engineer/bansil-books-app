@@ -28,7 +28,7 @@ export function TopHeader({
   onNavigateToCustomer,
 }: TopHeaderProps) {
   const isOffline = !connected || syncStatusText === "Offline";
-  const { user, logout } = useAuth();
+  const { user, logout, isOwner } = useAuth();
 
   return (
     <header className="app-top-header" role="banner">
@@ -44,7 +44,8 @@ export function TopHeader({
           </a>
         )}
         {/* Universal Search */}
-        <UniversalSearchBox onNavigateToCustomer={onNavigateToCustomer} />
+        {/* Search spans every module's data: Owner-only (server-enforced) */}
+        {isOwner && <UniversalSearchBox onNavigateToCustomer={onNavigateToCustomer} />}
       </div>
 
       <div className="app-top-header-right">

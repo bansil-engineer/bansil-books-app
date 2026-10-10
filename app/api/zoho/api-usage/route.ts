@@ -6,10 +6,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase, getApiUsageCache, setApiUsageCache } from "@/app/lib/db/database";
 import { fetchApiUsage } from "@/app/lib/zoho-api";
 import { readTokenStore } from "@/app/lib/zoho-token-store";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("zoho/api-usage", "GET"), "zoho/api-usage GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const db = getDatabase();
     const searchParams = request.nextUrl.searchParams;

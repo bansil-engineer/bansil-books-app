@@ -4,8 +4,13 @@ import { readTokenStore } from "@/app/lib/zoho-token-store";
 import { getDatabase, getSyncMetadata, getLatestSyncedDocumentDate } from "@/app/lib/db/database";
 import { formatDisplayDateTime, formatDisplayDate } from "@/app/lib/date-utils";
 import type { ConnectionStatus } from "@/app/types/zoho";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("zoho/status", "GET"), "zoho/status GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   let permitted = false;
   try { assertConnectionAllowed("zoho"); permitted = true; } catch { /* disconnected or unreadable policy */ }
   const store = permitted ? readTokenStore() : null;

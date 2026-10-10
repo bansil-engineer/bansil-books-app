@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function GET(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/gst/5g2b/status", "GET"), "audit/gst/5g2b/status GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const { searchParams } = new URL(req.url);
   const fy = searchParams.get('fy') || '2025-26';
   const cacheDir = path.resolve('output', 'gst_source_cache');

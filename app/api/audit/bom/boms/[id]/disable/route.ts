@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getAuditDatabase } from "@/app/lib/db/audit-database";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function POST(req: Request, context: any) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/bom/boms/[id]/disable", "POST"), "audit/bom/boms/[id]/disable POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const auditDb = getAuditDatabase();
   
   try {

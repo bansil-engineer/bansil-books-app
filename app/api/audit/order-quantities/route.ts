@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getValidAccessToken, fetchOrganizations } from "@/app/lib/zoho-api";
 import { secureZohoFetch } from "@/app/lib/zoho-security-guard";
 import { compareQuantities, type QuantityDocument, type QuantityKind } from "@/app/lib/order-quantity";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 type Source = Record<string, any>;
@@ -20,6 +22,9 @@ const normalizeDocument = (kind: QuantityKind, source: Source): QuantityDocument
 
 // Live read-only preview. No database, sync engine, audit run, or stored decision.
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/order-quantities", "GET"), "audit/order-quantities GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const params = request.nextUrl.searchParams;
   const catalog = params.get("catalog") === "1";
   const soId = params.get("so") || "";

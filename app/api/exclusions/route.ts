@@ -2,9 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase } from "@/app/lib/db/database";
 import { randomUUID } from "crypto";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 // GET /api/exclusions?financialYear=2025-26&status=ACTIVE
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("exclusions", "GET"), "exclusions GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_exclusion_management");
   if (disabled) return disabled;
   try {
@@ -46,6 +51,9 @@ export async function GET(req: NextRequest) {
 
 // POST /api/exclusions — create a new exclusion rule
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("exclusions", "POST"), "exclusions POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_exclusion_management");
   if (disabled) return disabled;
   try {
@@ -110,6 +118,9 @@ export async function POST(req: NextRequest) {
 
 // PATCH /api/exclusions — deactivate / reactivate a rule
 export async function PATCH(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("exclusions", "PATCH"), "exclusions PATCH");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_exclusion_management");
   if (disabled) return disabled;
   try {

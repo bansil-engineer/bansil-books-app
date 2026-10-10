@@ -3,6 +3,8 @@ import fs from "fs";
 import path from "path";
 import { getValidAccessToken } from "@/app/lib/zoho-api";
 import { secureZohoFetch } from "@/app/lib/zoho-security-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 const ZOHO_DEFAULT_ORG_ID = process.env.ZOHO_DEFAULT_ORG_ID;
 const MAX_GETS_PER_RUN = 100;
@@ -24,6 +26,9 @@ function getFyDates(fy: string) {
 }
 
 export async function POST(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/evidence/zoho-sync", "POST"), "audit/evidence/zoho-sync POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await req.json() as SyncRequest;
     const { fy, period, syncModule } = body;

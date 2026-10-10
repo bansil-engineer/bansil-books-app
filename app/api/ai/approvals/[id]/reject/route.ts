@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getAiDatabase } from "@/app/lib/db/ai-database";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/approvals/[id]/reject", "POST"), "ai/approvals/[id]/reject POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const id = (await params).id;
     const db = getAiDatabase();

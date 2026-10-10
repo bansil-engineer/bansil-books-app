@@ -1,9 +1,14 @@
 import { NextResponse, NextRequest } from "next/server";
 import { startPreAuditRun, getPreAuditRuns, getPreAuditRunResults } from "../../../../lib/audit/pre-audit-engine";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/run", "GET"), "audit/pre-audit/run GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const urlObj = new URL(request.url);
     const runId = urlObj.searchParams.get("runId");
@@ -23,6 +28,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/run", "POST"), "audit/pre-audit/run POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const { financialYear } = body;

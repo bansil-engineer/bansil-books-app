@@ -13,10 +13,15 @@ import {
   SiteActionStatus,
 } from "@/app/lib/customer-material-control-engine";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("reports/customer-material-control", "GET"), "reports/customer-material-control GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_reports", "sub_rep_customer_material");
   if (disabled) return disabled;
   try {
@@ -86,6 +91,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("reports/customer-material-control", "POST"), "reports/customer-material-control POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_reports", "sub_rep_customer_material");
   if (disabled) return disabled;
   try {

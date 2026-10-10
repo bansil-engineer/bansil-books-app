@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAuditDatabase } from "@/app/lib/db/audit-database";
 import { updateTraceabilityAlertStatus } from "@/app/lib/audit/traceability/traceability-service";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function PATCH(req: Request, context: any) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/traceability/alerts/[id]", "PATCH"), "audit/traceability/alerts/[id] PATCH");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const auditDb = getAuditDatabase();
   const params = await context.params;
   

@@ -32,7 +32,8 @@ import { CustomerMaterialControlView } from "@/app/components/CustomerMaterialCo
 import { ActionTakenView } from "@/app/components/ActionTakenView";
 import { CompositeAssemblyView } from "@/app/components/CompositeAssemblyView";
 import { ServicesView } from "@/app/components/ServicesView";
-import { Sidebar } from "@/app/components/Sidebar";
+import { Sidebar, sectionModule } from "@/app/components/Sidebar";
+import { useAuth } from "@/app/components/AuthProvider";
 import { TopHeader } from "@/app/components/TopHeader";
 import { ZohoActivityView } from "@/app/components/ZohoActivityView";
 import { SettingsModulesView } from "@/app/components/SettingsModulesView";
@@ -780,6 +781,17 @@ export default function HomePage() {
       }
     }
   }, []);
+
+  // OA P0: employees only see sections their grants cover (Owner sees all).
+  // UI convenience only — every data route is enforced server-side.
+  const { user: authUser, loading: authLoading, hasModule, isOwner } = useAuth();
+  useEffect(() => {
+    if (authLoading || !authUser || isOwner) return;
+    const mod = sectionModule(sidebarSection);
+    if (sidebarSection !== "dashboard" && !(typeof mod === "string" && hasModule(mod))) {
+      setSidebarSection("dashboard");
+    }
+  }, [authLoading, authUser, isOwner, hasModule, sidebarSection]);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [activeFy, setActiveFy] = useState<string>(() => getCurrentFinancialYear());
   const [dashboardMismatchReport, setDashboardMismatchReport] = useState<MasterInventoryMismatchReportResult | null>(null);

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuditDatabase } from "../../../../lib/db/audit-database";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/commercial-trace/customers", "GET"), "audit/commercial-trace/customers GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const db = getAuditDatabase();
 

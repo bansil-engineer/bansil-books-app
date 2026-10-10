@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDatabase, getFeatureSettings, updateFeatureSettings, updateFeatureSetting } from "@/app/lib/db/database";
 import { requireOwnerSession } from "@/app/lib/audit/api-guard";
 import { getFeatureDefinition } from "@/app/lib/feature-registry";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,10 @@ function touchesRegisteredFeatureKey(body: { settings?: unknown; key?: unknown }
   return false;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("settings", "GET"), "settings GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const db = getDatabase();
     const settings = getFeatureSettings(db);
@@ -45,6 +50,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("settings", "POST"), "settings POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await req.json();
 

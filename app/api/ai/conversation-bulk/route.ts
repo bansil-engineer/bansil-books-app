@@ -6,6 +6,8 @@ import {
   restoreAll,
   bulkDeleteBinnedPermanently,
 } from "@/app/lib/ai/conversation-bulk";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 // GET  ?scope=active|binned  -> read-only impact preview (counts + fingerprint). Mutates nothing.
 // POST { action: "MOVE_ALL_TO_BIN" | "RESTORE_ALL" | "DELETE_ALL_PERMANENTLY", ... }
@@ -13,6 +15,9 @@ import {
 // There is no HTTP DELETE handler.
 
 export async function GET(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/conversation-bulk", "GET"), "ai/conversation-bulk GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const scope = new URL(req.url).searchParams.get("scope");
     if (scope !== "active" && scope !== "binned") {
@@ -32,6 +37,9 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/conversation-bulk", "POST"), "ai/conversation-bulk POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     let body: any = null;
     try { body = await req.json(); } catch {}

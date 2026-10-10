@@ -10,10 +10,15 @@ import {
   type CustomerDetailsMissingFilterOptions,
 } from "@/app/lib/action-taken-engine";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("action-taken", "GET"), "action-taken GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_customers", "sub_cust_action_taken");
   if (disabled) return disabled;
   try {
@@ -73,6 +78,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("action-taken", "POST"), "action-taken POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_customers", "sub_cust_action_taken");
   if (disabled) return disabled;
   try {

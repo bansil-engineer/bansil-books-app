@@ -7,10 +7,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPriceReferenceData } from "@/app/lib/price-reference-engine";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("price-reference", "GET"), "price-reference GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_reports", "sub_rep_price_reference");
   if (disabled) return disabled;
   try {

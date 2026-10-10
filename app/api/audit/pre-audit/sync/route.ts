@@ -4,8 +4,13 @@ import {
   executeSmartSyncPreAudit, 
   PRE_AUDIT_SOURCE_CATALOG 
 } from "@/app/lib/audit/pre-audit-sync-service";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/sync", "GET"), "audit/pre-audit/sync GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const { searchParams } = new URL(request.url);
   const sourceId = searchParams.get("sourceId") || "BANK_TRANSACTIONS";
   const fy = searchParams.get("financialYear") || "2025-26";
@@ -44,6 +49,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/sync", "POST"), "audit/pre-audit/sync POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const sourceId = body.sourceId || "BANK_TRANSACTIONS";

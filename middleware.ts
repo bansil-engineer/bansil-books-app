@@ -24,17 +24,22 @@ export async function middleware(request: NextRequest) {
   // Allow public auth paths
   if (isPublicPath(pathname)) return NextResponse.next();
 
-  // Allow Next.js internals and static assets
+  // Allow Next.js internals and static assets.
+  // OA-RBAC-2a: the file-extension exemption never applies under /api/ —
+  // API routes serve no static files, and "/api/x/<id>.png" must not skip
+  // JWT verification.
+  const isApi = pathname === "/api" || pathname.startsWith("/api/");
   if (
     pathname.startsWith("/_next/") ||
     pathname.startsWith("/favicon") ||
-    pathname.endsWith(".ico") ||
-    pathname.endsWith(".png") ||
-    pathname.endsWith(".svg") ||
-    pathname.endsWith(".jpg") ||
-    pathname.endsWith(".css") ||
-    pathname.endsWith(".js") ||
-    pathname.endsWith(".woff2")
+    (!isApi &&
+      (pathname.endsWith(".ico") ||
+        pathname.endsWith(".png") ||
+        pathname.endsWith(".svg") ||
+        pathname.endsWith(".jpg") ||
+        pathname.endsWith(".css") ||
+        pathname.endsWith(".js") ||
+        pathname.endsWith(".woff2")))
   ) {
     return NextResponse.next();
   }

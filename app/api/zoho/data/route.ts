@@ -3,8 +3,13 @@ import { readTokenStore } from "@/app/lib/zoho-token-store";
 import { fetchInvoicesForDate, fetchBillsForDate, getValidAccessToken } from "@/app/lib/zoho-api";
 import { getTodayIST, isValidISODate, sumAmounts } from "@/app/lib/date-utils";
 import type { TodaysDataResponse, ZohoInvoice, ZohoBill } from "@/app/types/zoho";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("zoho/data", "GET"), "zoho/data GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const searchParams = req.nextUrl.searchParams;
     const isAuditMode = searchParams.get('audit') === 'true' || process.env.AUDIT_MODE === 'true'; // Audit mode override

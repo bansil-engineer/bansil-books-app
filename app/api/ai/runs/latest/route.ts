@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { getAiDatabase } from "@/app/lib/db/ai-database";
 import { getExecutionRun, getRunHandoffs } from "@/app/lib/ai/ceo/execution-lifecycle";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function GET(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/runs/latest", "GET"), "ai/runs/latest GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const url = new URL(req.url);
     const conversationId = url.searchParams.get("conversationId");

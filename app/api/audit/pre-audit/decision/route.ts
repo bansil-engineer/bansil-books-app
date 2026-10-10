@@ -4,6 +4,8 @@ import {
   saveRunDecision,
   getLastAcceptedDecision,
 } from "../../../../lib/audit/pre-audit-decision-service";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,9 @@ export const dynamic = "force-dynamic";
  * - isCurrentRunSuperseded: boolean (newer run exists after an accepted one)
  */
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/decision", "GET"), "audit/pre-audit/decision GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const urlObj = new URL(request.url);
     const runId = urlObj.searchParams.get("runId");
@@ -74,6 +79,9 @@ export async function GET(request: NextRequest) {
  * Zoho writes: 0.
  */
 export async function POST(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/decision", "POST"), "audit/pre-audit/decision POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const { runId, decision, note } = body;

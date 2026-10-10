@@ -12,10 +12,15 @@ import {
   cancelOrReverseAssembly,
 } from "@/app/lib/composite-assembly-engine";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("composite-assembly", "GET"), "composite-assembly GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_reconciliation", "sub_recon_composite_assembly");
   if (disabled) return disabled;
   try {
@@ -105,6 +110,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("composite-assembly", "POST"), "composite-assembly POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_reconciliation", "sub_recon_composite_assembly");
   if (disabled) return disabled;
   try {

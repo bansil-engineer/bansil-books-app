@@ -2,12 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { createWorkspace, listWorkspaces, getWorkspaceSources, type ComparisonMode } from "@/app/lib/audit/audit-service";
 import { requireOwnerSession, OWNER_ACTOR } from "@/app/lib/audit/api-guard";
 import { requireAuditFeaturesEnabled } from "@/app/lib/audit/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 const VALID_MODES: ComparisonMode[] = ["INTERNAL_EXTERNAL", "EXTERNAL_EXTERNAL", "INTERNAL_INTERNAL"];
 
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/workspaces", "GET"), "audit/workspaces GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireAuditFeaturesEnabled("module_audit_workspace", "sub_audit_workspaces");
   if (disabled) return disabled;
 

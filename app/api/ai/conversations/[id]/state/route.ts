@@ -1,10 +1,15 @@
 import { NextResponse } from "next/server";
 import { getAiDatabase } from "@/app/lib/db/ai-database";
 import { applyBinAction, deleteBinnedConversationPermanently } from "@/app/lib/ai/conversation-bin";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 // POST { action: "MOVE_TO_BIN" | "RESTORE" | "DELETE_PERMANENTLY" (+ { confirm: true, conversationId, previewFingerprint }) }
 // The client names an action, never a state. Only ACTIVE->BINNED and BINNED->ACTIVE succeed.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/conversations/[id]/state", "POST"), "ai/conversations/[id]/state POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const id = (await params).id;
     let body: any = null;

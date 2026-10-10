@@ -9,8 +9,13 @@
 import { NextResponse } from "next/server";
 import { getAuditDatabase } from "@/app/lib/db/audit-database";
 import { reconfirmOwnerLineMapping } from "@/app/lib/audit/manual-line-mapping-service";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function POST(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/manual-line-mapping/reconfirm", "POST"), "audit/manual-line-mapping/reconfirm POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const { mappingId, note } = body;

@@ -9,11 +9,16 @@ import {
   getDataSourceByCode,
   checkWatermarkStatus,
 } from "@/app/lib/ai/ceo/data-source-registry";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/data-sources/[id]/status", "GET"), "ai/data-sources/[id]/status GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const { id } = await params;
     let source = getDataSourceByCode(id);

@@ -3,6 +3,8 @@ import { getAuditDatabase } from "../../../lib/db/audit-database";
 import { syncCommercialTrace } from "../../../lib/audit/commercial-trace-sync-service";
 import { syncBankReconciliation } from "../../../lib/audit/bank-reconciliation-sync";
 import { syncApprovalPending, syncApprovalPendingDocument, TargetedDocParam } from "../../../lib/audit/approval-pending-sync";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +12,9 @@ const activeTargetedSyncs = new Set<string>();
 let isGlobalSyncActive = false;
 
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/section-sync", "GET"), "audit/section-sync GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const { searchParams } = new URL(req.url);
     const sectionKey = searchParams.get("sectionKey");
@@ -29,6 +34,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/section-sync", "POST"), "audit/section-sync POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   let db;
   let sectionKey;
 

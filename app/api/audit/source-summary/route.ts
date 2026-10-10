@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getBooksSourceSummary } from "@/app/lib/audit/books-source-adapter";
 import { requireAuditFeaturesEnabled } from "@/app/lib/audit/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +10,10 @@ export const dynamic = "force-dynamic";
 // No Zoho API calls happen here — this only reads the local, already-synced
 // SQLite cache, and only on an explicit request to this route (never on an
 // unrelated page's render).
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/source-summary", "GET"), "audit/source-summary GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireAuditFeaturesEnabled("module_audit_workspace", "sub_audit_workspaces");
   if (disabled) return disabled;
   try {

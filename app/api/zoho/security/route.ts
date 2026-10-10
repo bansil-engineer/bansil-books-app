@@ -4,8 +4,13 @@
 
 import { NextResponse } from "next/server";
 import { ZOHO_SECURITY_POLICY, getSecurityLogEntries } from "@/app/lib/zoho-security-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("zoho/security", "GET"), "zoho/security GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const recentBlockedAttempts = getSecurityLogEntries().slice(-10);
 
   return NextResponse.json({

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { updateCheckpointHumanReviewStatus } from "../../../../lib/db/audit-database";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function PATCH(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/pre-audit/checkpoint-review", "PATCH"), "audit/pre-audit/checkpoint-review PATCH");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await req.json();
     const { run_id, checkpoint_key, status, note } = body;

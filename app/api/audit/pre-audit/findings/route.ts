@@ -4,10 +4,15 @@ import {
   updateFindingHumanReview,
   getDiscoveredBankStatements 
 } from "../../../../lib/audit/audit-findings-service";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/findings", "GET"), "audit/pre-audit/findings GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const urlObj = new URL(request.url);
     const fy = urlObj.searchParams.get("financialYear") || "2025-26";
@@ -27,6 +32,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/pre-audit/findings", "PATCH"), "audit/pre-audit/findings PATCH");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const { findingId, status, note, reviewer } = body;

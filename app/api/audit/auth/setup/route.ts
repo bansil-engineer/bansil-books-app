@@ -7,6 +7,8 @@ import {
   OwnerAuthError,
 } from "@/app/lib/audit/owner-auth";
 import { verifyToken, AUTH_COOKIE_NAME } from "@/app/lib/auth";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -35,7 +37,10 @@ function requireSuperAdmin(req: NextRequest): NextResponse | null {
 // One-time bootstrap only. Refuses once a credential exists — see
 // bootstrapOwnerPassphrase(); this route can never be used to silently
 // take over an already-configured owner identity.
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/auth/setup", "GET"), "audit/auth/setup GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   return NextResponse.json({
     success: true,
     bootstrapped: isOwnerBootstrapped(),

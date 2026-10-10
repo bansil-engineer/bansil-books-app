@@ -4,8 +4,13 @@ import { evaluateSafetyGate } from "@/app/lib/ai/safety-gate";
 import { TOOL_REGISTRY } from "@/app/lib/ai/tool-registry";
 import { Role, Message } from "@/app/lib/ai/types";
 import { executeCeoOrchestration, handleOwnerMessage } from "@/app/lib/ai/ceo/ceo-orchestrator";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function POST(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("ai/chat", "POST"), "ai/chat POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const { message, conversationId } = await req.json();
 

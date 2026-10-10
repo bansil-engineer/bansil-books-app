@@ -5,6 +5,8 @@ import { configStatus, configureSecret, configureSecrets, configureWorkflow, cur
 import { SecretsVault } from "@/tools/chatgpt-antigravity-orchestrator/src/secrets.ts";
 import { WorkflowError } from "@/tools/chatgpt-antigravity-orchestrator/src/types.ts";
 import type { Decision } from "@/tools/chatgpt-antigravity-orchestrator/src/types.ts";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,6 +58,9 @@ function auth(request: Request, state: RuntimeState) { if (request.headers.get("
 type Context = { params: Promise<{ segments?: string[] }> };
 
 async function handle(request: Request, context: Context) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("orchestrator/[[...segments]]", request.method), "orchestrator/[[...segments]] (dispatch)");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const state = runtimeState(); auth(request, state);
     const segments = (await context.params).segments || [];

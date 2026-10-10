@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { attemptOwnerLogin, OWNER_SESSION_COOKIE } from "@/app/lib/audit/owner-auth";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/auth/login", "POST"), "audit/auth/login POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await req.json();
     if (typeof body.passphrase !== "string") {

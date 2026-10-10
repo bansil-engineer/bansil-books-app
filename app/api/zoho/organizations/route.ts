@@ -6,8 +6,13 @@
 
 import { NextResponse } from "next/server";
 import { fetchOrganizations } from "@/app/lib/zoho-api";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("zoho/organizations", "GET"), "zoho/organizations GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const organizations = await fetchOrganizations();
 

@@ -14,10 +14,15 @@ import { getAuditDatabase } from "@/app/lib/db/audit-database";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
 import { buildMismatchResolutionContext } from "@/app/lib/audit/mismatch-resolution/candidate-query";
 import { suggestResolution, suggestBomResolution } from "@/app/lib/audit/mismatch-resolution/mismatch-suggestion-engine";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/mismatch-resolution/suggest", "POST"), "audit/mismatch-resolution/suggest POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_audit_workspace", "sub_mismatch_resolution", "mismatch_feat_intelligent_suggestions");
   if (disabled) return disabled;
 

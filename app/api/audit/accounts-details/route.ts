@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { DatabaseSync } from "node:sqlite";
 import * as path from "node:path";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,6 +21,9 @@ const sources: Record<string, string> = {
 };
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/accounts-details", "GET"), "audit/accounts-details GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   let db: DatabaseSync | undefined;
   let booksDb: DatabaseSync | undefined;
   try {

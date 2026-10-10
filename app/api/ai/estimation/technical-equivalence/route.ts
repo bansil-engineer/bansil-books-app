@@ -26,6 +26,8 @@ import type {
   TechnicalEquivalenceResult,
   BoqLineTechnicalEquivalenceResult,
 } from "@/app/lib/ai/estimation/technical-equivalence-types";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 interface SingleComparisonRequest {
   mode: "single";
@@ -55,7 +57,10 @@ interface BatchComparisonResponse {
   engineVersion: string;
 }
 
-export async function POST(request: NextRequest): Promise<NextResponse> {
+export async function POST(request: NextRequest): Promise<Response> {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("ai/estimation/technical-equivalence", "POST"), "ai/estimation/technical-equivalence POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body: ComparisonRequest = await request.json();
 
@@ -122,7 +127,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 }
 
-export async function GET(): Promise<NextResponse> {
+export async function GET(request: Request): Promise<Response> {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("ai/estimation/technical-equivalence", "GET"), "ai/estimation/technical-equivalence GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   return NextResponse.json({
     endpoint: "/api/ai/estimation/technical-equivalence",
     engineVersion: TECHNICAL_EQUIVALENCE_ENGINE_VERSION,

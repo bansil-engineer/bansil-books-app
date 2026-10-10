@@ -9,8 +9,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchOrganizations } from "@/app/lib/zoho-api";
 import { updateOrganization } from "@/app/lib/zoho-token-store";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function POST(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("zoho/select-org", "POST"), "zoho/select-org POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const body = await request.json();
     const { organizationId } = body as { organizationId: string };

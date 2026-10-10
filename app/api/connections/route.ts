@@ -1,12 +1,20 @@
 import { CONNECTORS, readPolicy, writePolicy, localControlRequest } from '@/app/lib/external-connections.cjs';
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 const respond = (body: unknown,status=200)=>Response.json(body,{status,headers:{'Cache-Control':'no-store'}});
 export async function GET(request:Request){
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("connections", "GET"), "connections GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try{localControlRequest(request);return respond({policy:readPolicy(),connectors:CONNECTORS});}
   catch(e){return respond({error:e instanceof Error?e.message:'Connection controls unavailable'},403);}
 }
 export async function POST(request:Request){
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("connections", "POST"), "connections POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try{
     localControlRequest(request);
     if(!request.headers.get('content-type')?.includes('application/json'))return respond({error:'JSON required'},415);

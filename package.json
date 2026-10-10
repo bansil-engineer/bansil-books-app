@@ -48,7 +48,9 @@
     "test:audit-match-service": "node --experimental-strip-types scripts/audit-match-service-tests.ts",
     "test:audit-feature-controls": "node --experimental-strip-types scripts/audit-feature-controls-tests.ts",
     "test:project-feature-controls": "node --experimental-strip-types scripts/project-feature-controls-tests.ts",
-    "test:auth-db": "node --experimental-strip-types scripts/oa-u2-auth-db-tests.ts"
+    "test:auth-db": "node --experimental-strip-types scripts/oa-u2-auth-db-tests.ts",
+    "test:rbac": "node --experimental-strip-types scripts/oa-rbac-2a-tests.ts",
+    "test:p0-employee": "node --experimental-strip-types scripts/oa-p0-first-employee-tests.ts"
   },
   "dependencies": {
     "next": "16.3.4",

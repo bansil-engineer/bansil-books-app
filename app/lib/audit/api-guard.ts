@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isValidOwnerSession, OWNER_ACTOR, OWNER_SESSION_COOKIE } from "./owner-auth.ts";
 import { verifyTokenEdge } from "../auth-edge.ts";
+import { resolveRequestPrincipal } from "../route-guard.ts";
 
 /** Cookie name for the general authentication JWT — must match middleware.ts. */
 const AUTH_COOKIE = "bansil_auth";
@@ -19,7 +20,33 @@ const AUTH_COOKIE = "bansil_auth";
  * identity for the resulting write — this function's only job is to
  * decide whether that identity is even allowed to act right now.
  */
+/**
+ * OA P0: the Owner passphrase session cookie is a bearer token that is not
+ * bound to the signed-in user. On a shared browser an employee could inherit
+ * it after the Owner signs out. So every Owner-session gate FIRST requires
+ * that the CURRENT signed-in user is the live Owner (live AUTH_USERS record
+ * or live auth.db session). Synchronous — call sites are unchanged.
+ * Returns a response to send, or null when the live Owner is signed in.
+ */
+function liveOwnerDenied(req: NextRequest): NextResponse | null {
+  let resolved: ReturnType<typeof resolveRequestPrincipal>;
+  try {
+    resolved = resolveRequestPrincipal(req);
+  } catch {
+    return NextResponse.json({ success: false, error: "Authorization service unavailable" }, { status: 503 });
+  }
+  if (!resolved.ok) {
+    return NextResponse.json({ success: false, error: "Unauthorized." }, { status: resolved.status });
+  }
+  if (!resolved.principal.isOwner) {
+    return NextResponse.json({ success: false, error: "Forbidden. Only the Owner can perform this action." }, { status: 403 });
+  }
+  return null;
+}
+
 export function requireOwnerSession(req: NextRequest): NextResponse | null {
+  const notOwner = liveOwnerDenied(req);
+  if (notOwner) return notOwner;
   const token = req.cookies.get(OWNER_SESSION_COOKIE)?.value;
   if (!isValidOwnerSession(token)) {
     return NextResponse.json(
@@ -73,6 +100,11 @@ export async function requireOwnerSessionOrForbid(req: NextRequest): Promise<Nex
       { status: 403 }
     );
   }
+
+  // ---- Layer 2b (OA P0): the signed-in user must be the LIVE Owner ----
+  // (live AUTH_USERS record / live auth.db session — not just the JWT claim)
+  const notOwner = liveOwnerDenied(req);
+  if (notOwner) return notOwner;
 
   // ---- Layer 3: Owner session passphrase gate ----
   // Even a super_admin must hold a valid Owner session (obtained by

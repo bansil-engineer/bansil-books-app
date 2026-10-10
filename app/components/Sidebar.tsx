@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useAuth } from "./AuthProvider";
 
 type SidebarSection =
   | "dashboard"
@@ -36,6 +37,35 @@ interface NavGroup {
   icon: string;
   featureKey?: string;
   children?: NavChild[];
+}
+
+/**
+ * Permission module behind each sidebar group / child (OA P0). Settings has no
+ * module: it is Owner-only. Children not listed inherit their group's module.
+ * UI convenience only — every API route is enforced server-side.
+ */
+const GROUP_MODULE: Record<string, string | null> = {
+  dashboard: "dashboard",
+  pre_audit_verification: "audit",
+  reconciliation: "reconciliation",
+  audit_workspace: "audit",
+  inventory: "inventory",
+  transactions: "transactions",
+  services: "services",
+  customers: "customers",
+  reports: "reports",
+  estimation: "estimation",
+  ai_assistant: "ai-assistant",
+  settings: null,
+};
+const CHILD_MODULE: Record<string, string> = { tender_hub: "tender-hub" };
+
+/** Module a section id belongs to; null = Owner-only; undefined = unknown section. */
+export function sectionModule(sectionId: string): string | null | undefined {
+  if (sectionId in GROUP_MODULE) return GROUP_MODULE[sectionId];
+  if (sectionId in CHILD_MODULE) return CHILD_MODULE[sectionId];
+  const parent = NAV_GROUPS.find((g) => g.children?.some((c) => c.id === sectionId));
+  return parent ? GROUP_MODULE[parent.id] : undefined;
 }
 
 const NAV_GROUPS: NavGroup[] = [
@@ -213,10 +243,20 @@ export function Sidebar({
     return featureSettings[key] !== false;
   };
 
-  const visibleGroups = NAV_GROUPS.filter((g) => isFeatureEnabled(g.featureKey)).map((g) => ({
-    ...g,
-    children: g.children ? g.children.filter((c) => isFeatureEnabled(c.featureKey)) : undefined,
-  }));
+  const { user, hasModule, isOwner } = useAuth();
+  const userMay = (sectionId: string) => {
+    if (isOwner) return true;
+    if (!user) return sectionId === "dashboard"; // session still loading / unavailable
+    const mod = sectionModule(sectionId);
+    return typeof mod === "string" && hasModule(mod);
+  };
+
+  const visibleGroups = NAV_GROUPS.filter((g) => isFeatureEnabled(g.featureKey) && userMay(g.id))
+    .map((g) => ({
+      ...g,
+      children: g.children ? g.children.filter((c) => isFeatureEnabled(c.featureKey) && userMay(c.id)) : undefined,
+    }))
+    .filter((g) => !g.children || g.children.length > 0 || isOwner);
 
   useEffect(() => {
     const parent = NAV_GROUPS.find((g) => g.children?.some((c) => c.id === activeSection));

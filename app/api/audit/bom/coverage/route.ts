@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export async function POST(req: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/bom/coverage", "POST"), "audit/bom/coverage POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const { assemblyId } = await req.json();
     if (!assemblyId) {

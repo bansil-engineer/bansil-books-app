@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runActivityBackfill, getActivityBackfillStatus } from "@/app/lib/zoho-activity-backfill-engine";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +11,10 @@ export const dynamic = "force-dynamic";
  * LOCAL-ONLY status check for the durable month-wise Activity backfill job.
  * ZOHO API CALLS: 0.
  */
-export async function GET() {
+export async function GET(request: Request) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("activity/backfill", "GET"), "activity/backfill GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const status = getActivityBackfillStatus();
     return NextResponse.json({ success: true, ...status });
@@ -28,6 +33,9 @@ export async function GET() {
  * Strictly GET-only against Zoho. Zero writes.
  */
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("activity/backfill", "POST"), "activity/backfill POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("action_zoho_activity_backfill");
   if (disabled) return disabled;
   try {

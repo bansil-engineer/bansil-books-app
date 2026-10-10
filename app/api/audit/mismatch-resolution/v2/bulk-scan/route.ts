@@ -6,7 +6,12 @@ import { buildBulkMismatchResolutionContext } from "../../../../../lib/audit/mis
 import { suggestV2Resolutions } from "../../../../../lib/audit/mismatch-resolution/mismatch-suggestion-engine";
 import { getCustomerList } from "../../../../../lib/customer-details-engine";
 import { getPendingCustomersSummary } from "../../../../../lib/customer-material-control-engine";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 export async function POST(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/mismatch-resolution/v2/bulk-scan", "POST"), "audit/mismatch-resolution/v2/bulk-scan POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_audit_workspace", "sub_mismatch_resolution", "mismatch_feat_intelligent_suggestions");
   if (disabled) return disabled;
 

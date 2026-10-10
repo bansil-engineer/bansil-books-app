@@ -3,6 +3,8 @@ import { getValidAccessToken, fetchOrganizations } from "@/app/lib/zoho-api";
 import { secureZohoFetch } from "@/app/lib/zoho-security-guard";
 import { classifyMapping, extractCustomField } from "@/app/lib/audit/so-po-mapping";
 import type { LinkEvidence } from "@/app/lib/audit/so-po-mapping";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 const kinds = { PO: "purchaseorder", SO: "salesorder" } as const;
@@ -11,6 +13,9 @@ const normalize = (value: string) => value.trim().toLocaleLowerCase();
 
 // On-demand Books GETs only. No sync, database connection, or persisted audit result.
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("audit/order-comparison", "GET"), "audit/order-comparison GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const kind = request.nextUrl.searchParams.get("kind") as keyof typeof kinds;
   const number = request.nextUrl.searchParams.get("number")?.trim() || "";
   if (!Object.hasOwn(kinds, kind) || !number || number.length > 100) {

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCommercialTrace, getAllCommercialTraces } from "../../../lib/audit/commercial-trace-service";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("audit/commercial-trace", "GET"), "audit/commercial-trace GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const { searchParams } = new URL(req.url);
     const soNumber = searchParams.get("so_number");

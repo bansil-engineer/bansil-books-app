@@ -11,6 +11,8 @@ import {
 } from "../../lib/inventory-mismatch-engine.ts";
 import type { ReconciliationFilter } from "../../types/reconciliation.ts";
 import { requireFeaturesEnabled } from "../../lib/feature-guard.ts";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 // This route is shared by Dashboard, Reconciliation, Reports, Services,
 // Customer Details, and Action Taken (see PROJECT_FEATURE_CONTROLS.md's
@@ -34,6 +36,9 @@ const EXCLUSIVE_OPERATIONAL_TAB_FEATURE: Record<string, string> = {
 };
 
 export async function GET(request: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(request, policyFor("inventory-mismatch", "GET"), "inventory-mismatch GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   try {
     const { searchParams } = new URL(request.url);
 

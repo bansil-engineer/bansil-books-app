@@ -10,6 +10,8 @@ import {
 import { getCurrentFyStart, getActivityDateRange } from "@/app/lib/date-period-utils";
 import { syncZohoActivityLogs } from "@/app/lib/zoho-activity-engine";
 import { requireFeaturesEnabled } from "@/app/lib/feature-guard";
+import { guardRoute } from "@/app/lib/route-guard";
+import { policyFor } from "@/app/lib/route-policy-manifest";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +21,9 @@ export const dynamic = "force-dynamic";
  * ZOHO API CALLS: 0 on page open.
  */
 export async function GET(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("activity", "GET"), "activity GET");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_zoho_activity", "sub_trans_zoho_activity");
   if (disabled) return disabled;
   try {
@@ -142,6 +147,9 @@ export async function GET(req: NextRequest) {
  * Strictly GET from Zoho. Zero writes.
  */
 export async function POST(req: NextRequest) {
+  // OA-RBAC-2a: centralized server-side authorization (live session + permission check)
+  const rbacGuard = await guardRoute(req, policyFor("activity", "POST"), "activity POST");
+  if (!rbacGuard.ok) return rbacGuard.response;
   const disabled = requireFeaturesEnabled("module_zoho_activity", "action_zoho_manual_sync");
   if (disabled) return disabled;
   try {
